@@ -1,3 +1,5 @@
 .venv
 .env
 check.py
+__pycache__
+conversation_history.json

@@ -5,7 +5,6 @@ import sounddevice as sd
 import queue
 import requests
 
-
 # Change how the Engine Sounds-------xXunderconstructionXx-------------------------------------------------------------------
 
 """
@@ -34,6 +33,53 @@ def speak(_audio=None,voice_change=False):
     engine.stop()
     return _audio
 
+# PIPER_MODEL_PATH = ""
+# _piper_voice_instance = None
+
+# def get_piper_voice():
+#     """Lazy loads the Piper voice model only when needed."""
+#     global _piper_voice_instance
+#     if _piper_voice_instance is None:
+#         if not os.path.exists(PIPER_MODEL_PATH):
+#             print(f"ERROR: Piper model not found at {PIPER_MODEL_PATH}")
+#             print("Please download the .onnx and .json files.")
+#             return None
+#         try:
+#             # load the voice
+#             _piper_voice_instance = PiperVoice.load(PIPER_MODEL_PATH)
+#         except Exception as e:
+#             print(f"Failed to load Piper model: {e}")
+#             return None
+#     return _piper_voice_instance
+
+# def speak(_audio=None, voice_change=False):
+#     """
+#     Synthesizes text to speech using Piper-TTS and plays it via sounddevice.
+#     """
+#     if not _audio:
+#         return ""
+
+#     print(f"Pulse: {_audio}")
+    
+#     voice = get_piper_voice()
+    
+#     if not voice:
+#         print(f"(Audio output unavailable): {_audio}")
+#         return _audio
+
+#     stream = voice.synthesize_stream_raw(_audio)
+    
+#     try:
+#         with sd.RawOutputStream(samplerate=voice.config.sample_rate, 
+#                                 channels=1, 
+#                                 dtype='int16') as s:
+#             for audio_bytes in stream:
+#                 s.write(audio_bytes)
+                
+#     except Exception as e:
+#         print(f"Audio playback error: {e}")
+
+#     return _audio
 
 def check_internet_connection(url='http://www.google.com/', timeout=5):
     """Checks for a stable internet connection."""

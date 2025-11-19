@@ -374,13 +374,6 @@ SOFTWARE.
 - Hugging Face for model hosting and transformers library
 - Open source community for supporting libraries
 
-## Acknowledgments
-
-- Meta AI for Llama 3.2 3B Instruct
-- Google for Gemini 2.5 Pro API
-- Hugging Face for model hosting and transformers library
-- Open source community for supporting libraries
-
 ---
 
 **Note**: This is a development tool that executes shell commands on your system. Always review the commands the agent plans to execute and use appropriate caution, especially with destructive operations.

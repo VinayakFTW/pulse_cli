@@ -133,7 +133,7 @@ def tool_dispatcher(response, model_obj, terminators=None, model_type="local"):
         
         query_func = lambda hist: query_llm(model_obj, hist, model_type, terminators)
         
-        result_message = start_cli_agent_loop(task_description, query_func)
+        result_message = start_cli_agent_loop(task_description, query_func,model_type)
         return tool_name, result_message
         
     return None, "Unknown tool."

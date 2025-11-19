@@ -12,7 +12,7 @@ def clean_json_response(response_str):
         response_str = response_str.split("```")[0].strip()
     return response_str
 
-def start_cli_agent_loop(task_description, query_func):
+def start_cli_agent_loop(task_description, query_func,model_type):
     print(f"CLI Agent Activated. Task: {task_description}")
     speak(f"Starting CLI task: {task_description}")
 
@@ -28,12 +28,13 @@ def start_cli_agent_loop(task_description, query_func):
     for step in range(10):
         try:
             # --- 1. RATE LIMIT CHECK ---
-            time_since_last = time.time() - last_request_time
-            
-            if time_since_last < RATE_LIMIT_DELAY and last_request_time != 0:
-                wait_time = RATE_LIMIT_DELAY - time_since_last
-                print(f"Rate limit safety: Waiting {wait_time:.1f} seconds...")
-                time.sleep(wait_time)
+            if model_type == "gemini":
+                time_since_last = time.time() - last_request_time
+                
+                if time_since_last < RATE_LIMIT_DELAY and last_request_time != 0:
+                    wait_time = RATE_LIMIT_DELAY - time_since_last
+                    print(f"Rate limit safety: Waiting {wait_time:.1f} seconds...")
+                    time.sleep(wait_time)
 
             # --- 2. THINK ---
             print(f"Thinking (Step {step+1})...")

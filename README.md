@@ -62,7 +62,7 @@ The CLI agent follows a Think-Act-Observe loop:
   - GPU with CUDA support (recommended)
   - Minimum 8GB VRAM
   - 16GB+ system RAM
-- **For Gemini API Only**:
+- **For OpenAI API Only**:
   - Any modern CPU
   - Stable internet connection
 
@@ -76,7 +76,7 @@ The CLI agent follows a Think-Act-Observe loop:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/VinayakFTW/pulse_cli
 cd pulse-cli
 ```
 
@@ -108,10 +108,10 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 Create a `.env` file in the project root:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_gemini_api_key_here
 ```
 
-**To obtain a Gemini API key:**
+**To obtain a OpenAI API key:**
 1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
 2. Sign in with your Google account
 3. Create a new API key

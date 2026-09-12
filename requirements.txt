@@ -1,10 +1,9 @@
 sounddevice
 pyaudio
 dotenv
-pyttsx3
 requests
 numpy
 SpeechRecognition
-transformers
-google-generativeai
+openai
+soprano-tts
 # torch torchvision --index-url https://download.pytorch.org/whl/cu130

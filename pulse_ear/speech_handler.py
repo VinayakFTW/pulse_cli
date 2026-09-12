@@ -1,159 +1,147 @@
-import pyttsx3
 import speech_recognition as sr
-import numpy as np
 import sounddevice as sd
-import queue
-import requests
+from soprano.utils.streaming import play_stream
+from soprano import SopranoTTS
+from faster_whisper import WhisperModel
 
-# Change how the Engine Sounds-------xXunderconstructionXx-------------------------------------------------------------------
+_tts_model = None
+_tts_enabled = True
 
-"""
-def voice_change(voice_index=None):
-    engine = pyttsx3.init()
-    voices = engine.getProperty('voices')
+SAMPLE_RATE = 16000
+
+def set_tts_enabled(enabled: bool):
+    """Controls whether speak() synthesizes and plays audio."""
+    global _tts_enabled
+    _tts_enabled = bool(enabled)
+
+def is_tts_enabled() -> bool:
+    """Returns whether TTS audio playback is currently enabled."""
+    return _tts_enabled
+
+def get_tts_model():
+    """Lazy loads SopranoTTS on demand to avoid import delays and premature VRAM allocation."""
+    global _tts_model
+    if _tts_model is None:
+        device = 'cuda'
+        _tts_model = SopranoTTS(
+            backend='transformers',
+            device=device,
+            cache_size_mb=500,
+            decoder_batch_size=2
+        )
+    return _tts_model
+
+def speak(_audio=None, voice_change=False):
+    """
+    Synthesizes text to speech using Soprano TTS and plays it via sounddevice streaming.
+    Returns the spoken text string.
+    """
+    if not _audio or not _tts_enabled:
+        return str(_audio) if _audio is not None else ""
+
+    text = str(_audio).strip()
+    if not text:
+        return ""
+
     try:
-        if len(voices) > voice_index:
-            engine.setProperty('voice', voices[voice_index].id)
-        else:
-            print(f"Invalid voice index. Available voices: {list(range(len(voices)))}")
+        model = get_tts_model()
+        stream = model.infer_stream(text, chunk_size=1)
+        play_stream(stream)
     except Exception as e:
-        print(f"Error setting voice: {e}")
-        engine.setProperty('voice', voices[0].id)
-    return engine
-"""
+        print(f"Audio playback error: {e}")
 
-def speak(_audio=None,voice_change=False):
-    # if voice_change:
-    #     engine = voice_change(voice_index)
-    # else:
-    #     engine = pyttsx3.init()
-    engine = pyttsx3.init()
-    engine.say(_audio)
-    engine.runAndWait()
-    engine.stop()
-    return _audio
+    return text
 
-# PIPER_MODEL_PATH = ""
-# _piper_voice_instance = None
+def get_stt_model():
+    global _stt_model
 
-# def get_piper_voice():
-#     """Lazy loads the Piper voice model only when needed."""
-#     global _piper_voice_instance
-#     if _piper_voice_instance is None:
-#         if not os.path.exists(PIPER_MODEL_PATH):
-#             print(f"ERROR: Piper model not found at {PIPER_MODEL_PATH}")
-#             print("Please download the .onnx and .json files.")
-#             return None
-#         try:
-#             # load the voice
-#             _piper_voice_instance = PiperVoice.load(PIPER_MODEL_PATH)
-#         except Exception as e:
-#             print(f"Failed to load Piper model: {e}")
-#             return None
-#     return _piper_voice_instance
+    if _stt_model is None:
+        print("Loading Whisper Large-v3-Turbo...")
 
-# def speak(_audio=None, voice_change=False):
-#     """
-#     Synthesizes text to speech using Piper-TTS and plays it via sounddevice.
-#     """
-#     if not _audio:
-#         return ""
+        _stt_model = WhisperModel(
+            "large-v3-turbo",
+            device="cuda",
+            compute_type="float16",
+        )
 
-#     print(f"Pulse: {_audio}")
-    
-#     voice = get_piper_voice()
-    
-#     if not voice:
-#         print(f"(Audio output unavailable): {_audio}")
-#         return _audio
+        print("Whisper loaded.")
+    return _stt_model
 
-#     stream = voice.synthesize_stream_raw(_audio)
-    
-#     try:
-#         with sd.RawOutputStream(samplerate=voice.config.sample_rate, 
-#                                 channels=1, 
-#                                 dtype='int16') as s:
-#             for audio_bytes in stream:
-#                 s.write(audio_bytes)
-                
-#     except Exception as e:
-#         print(f"Audio playback error: {e}")
+def record_microphone(duration=5):
+    """
+    Records microphone audio directly into a NumPy array.
 
-#     return _audio
+    Returns:
+        np.ndarray: float32 mono audio at 16 kHz
+    """
 
-def check_internet_connection(url='http://www.google.com/', timeout=5):
-    """Checks for a stable internet connection."""
+    print("Listening...")
+
+    audio = sd.rec(
+        int(duration * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=1,
+        dtype="float32",
+    )
+
+    sd.wait()
+    return audio[:, 0]
+
+def transcribe_audio(audio):
+    """
+    Transcribes a NumPy audio array using local Whisper.
+    """
+
+    model = get_stt_model()
+
+    segments, info = model.transcribe(
+        audio,
+        beam_size=1,
+        language=None,
+        vad_filter=True,
+    )
+
+    text = "".join(
+        segment.text
+        for segment in segments
+    ).strip()
+
+    return text, info.language
+
+def command(duration=5):
+    """
+    Records audio from microphone and transcribes using Whisper.
+    """
     try:
-        requests.get(url, timeout=timeout)
-        return True
-    except (requests.ConnectionError, requests.Timeout):
-        return False
+        audio = record_microphone(duration)
+        text, language = transcribe_audio(audio)
 
-def command_google():
-    """
-    Listens using speech_recognition and uses Google's (ONLINE) Web Speech API.
-    """
-    _recog = sr.Recognizer()
-    with sr.Microphone() as _source:
-        print("Listening... (Google Online)")
-        _recog.pause_threshold = 1
-        _recog.adjust_for_ambient_noise(_source, duration=1)
-        _audio = _recog.listen(_source)
-    
-    try:
-        print("Recognizing... (Google Online)")
-        _query = _recog.recognize_google(_audio)
-        print(f"Recognized: {_query}")
-        return _query
-    except sr.UnknownValueError:
-        print("Sorry, I didn't understand that")
-        return "0"
-    except sr.RequestError as error1:
-        print(f"Google API request failed; {error1}")
-        return "0"
-    except Exception as error2:
-        print(f"An error occurred: {error2}")
-        return "0"
+        if not text:
+            print("Didn't understand anything.")
+            return "0"
 
-def command():
-    """
-    Checks for internet and routes to Google (online) or Whisper (offline).
-    """
-    if check_internet_connection():
-        return command_google()
-    else:
-        print("No internet connection.")
-        return None
+        print(f"Language: {language}")
+        print(f"Recognized: {text}")
 
-def listen_for_wake_word_google(wake_word="wake", duration=2):
-    """Listens for wake word using Google (Online) Web Speech."""
-    print(f"Listening for wake word '{wake_word}'... (Google Online)")
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        r.adjust_for_ambient_noise(source, duration=0.5)
-        try:
-            audio = r.listen(source, timeout=3, phrase_time_limit=duration)
-        except sr.WaitTimeoutError:
-            return False
+        return text
 
-    try:
-        transcribed_text = r.recognize_google(audio).lower().strip()
-        if wake_word in transcribed_text:
-            print(f"Wake word detected in: '{transcribed_text}'")
-            return True
-        return False
-    except (sr.UnknownValueError, sr.RequestError):
-        return False
     except Exception as e:
-        print(f"An error occurred during wake word detection: {e}")
-        return False
+        print(f"STT error: {e}")
+        return "0"
 
 
 def listen_for_wake_word(wake_word="wake", duration=2):
     """
     Checks for internet and routes to Google (online) for wake word detection.
     """
-    if check_internet_connection():
-        return listen_for_wake_word_google(wake_word, duration)
-    else:
-        return "Network Error"
+    print(f"Listening for wake word '{wake_word}'...")
+
+    audio = record_microphone(duration)
+    text, _ = transcribe_audio(audio)
+    text = text.lower().strip()
+
+    if wake_word.lower() in text:
+        print(f"Wake word detected in: '{text}'")
+        return True
+
+    return False

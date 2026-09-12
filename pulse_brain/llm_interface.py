@@ -1,76 +1,46 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
-import google.generativeai as genai
+from openai import OpenAI
 from pulse_brain.brain import start_cli_agent_loop
-from pulse_config.config import GEMINI_API_KEY
+from pulse_config.config import ENVIRONMENT
 import re
 
-def load_gemini_model(api_key):
-    """Configures and returns the Gemini model."""
-    if not api_key:
-        raise ValueError("Gemini API Key not found in environment variables.")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-pro')
-    return model, "gemini"
+def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"],base_url=ENVIRONMENT["OPENAI_API_BASE"]):
+    """Configures and returns the OpenAI client."""
+    if not api_key or base_url is None:
+        raise ValueError("OpenAI API key or Base URL not found in Environment variables. Please set OPENAI_API_KEY and OPENAI_API_BASE.")
 
-def load_model(model_name, cache_directory=None):
-    """Loads Local LLM, returns pipeline and terminators."""
-    llm_pipeline = pipeline(
-        "text-generation",
-        model=model_name,
-        model_kwargs={"dtype": torch.bfloat16},
-        device_map="auto",
-    )
-    terminators = [
-        llm_pipeline.tokenizer.eos_token_id,
-        llm_pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-    ]
-    return llm_pipeline, terminators
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    return client, "openai"
+
 
 def query_llm(model_obj, history, model_type="local", terminators=None):
     """
-    Unified function to query either Local LLM or Gemini.
+    Unified function to query either Local LLM or OpenAI.
     Returns the string response.
     """
-    # gemini locgi
-    if model_type == "gemini":
+    if model_type == "openai":
         try:
             system_instruction = None
             chat_history = []
-            
+
             for msg in history:
-                if msg['role'] == 'system':
-                    system_instruction = msg['content']
-                elif msg['role'] == 'user':
-                    chat_history.append({'role': 'user', 'parts': [msg['content']]})
-                elif msg['role'] == 'assistant':
-                    chat_history.append({'role': 'model', 'parts': [msg['content']]})
-            
-            if system_instruction:
-                active_model = genai.GenerativeModel('gemini-2.5-pro', system_instruction=system_instruction)
-            else:
-                active_model = model_obj
+                if msg["role"] == "system":
+                    system_instruction = msg["content"]
+                else:
+                    chat_history.append(msg)
 
-            chat = active_model.start_chat(history=chat_history[:-1])
-            last_msg = chat_history[-1]['parts'][0]
-            response = chat.send_message(last_msg)
-            return response.text
-            
+            response = model_obj.responses.create(
+                model="gpt-5",
+                instructions=system_instruction,
+                input=chat_history,
+            )
+
+            return response.output_text
+
         except Exception as e:
-            print(f"Gemini Error: {e}")
-            return "I encountered an error reaching the Gemini API."
-
-    else:
-        # local LLM Logic
-        outputs = model_obj(
-            history,
-            max_new_tokens=256,
-            eos_token_id=terminators,
-            do_sample=True,
-            temperature=0.6,
-            top_p=0.9,
-        )
-        return outputs[0]["generated_text"][-1]["content"]
+            print(f"OpenAI Error: {e}")
+            return "I encountered an error reaching the OpenAI API."
 
 def generate_response(_query, history, model_obj, terminators=None, model_type="local", is_tool_check=False):
     """
@@ -93,14 +63,16 @@ def generate_response(_query, history, model_obj, terminators=None, model_type="
 
 def parse_tool_call(response):
     try:
-        if not response.strip().startswith("[TOOL:") or not response.strip().endswith("]"):
+        stripped = response.strip()
+        if not (stripped.startswith("[TOOL:") and stripped.endswith("]")):
             return None, None
 
-        print(f"Tool command received: {response}")
-        command_str = response.strip()[6:-1]
+        print(f"Tool command received: {stripped}")
+        command_str = stripped[6:-1].strip()
 
         match = re.match(r"^\s*([a-zA-Z0-9_]+)\s*,?(.*)", command_str, re.S)
         if not match:
+            print(f"Malformed tool syntax: {stripped}")
             return None, None
             
         tool_name = match.group(1).strip()
@@ -121,19 +93,22 @@ def parse_tool_call(response):
 def tool_dispatcher(response, model_obj, terminators=None, model_type="local"):
     """
     Parses the LLM's tool command and calls the appropriate function.
+    Returns (tool_name, tool_result). If response is chat, returns (None, None).
     """
     tool_name, params = parse_tool_call(response)
 
     if not tool_name:
-        if response != "[CHAT]":
-            print(f"Unknown tool format: {response}")
+        # Normal conversational response from router
         return None, None
     elif tool_name == "cli_agent":
         task_description = params.get('task')
+        if not task_description:
+            task_description = "Execute requested CLI task"
         
         query_func = lambda hist: query_llm(model_obj, hist, model_type, terminators)
         
-        result_message = start_cli_agent_loop(task_description, query_func,model_type)
+        result_message = start_cli_agent_loop(task_description, query_func, model_type)
         return tool_name, result_message
         
-    return None, "Unknown tool."
+    print(f"Warning: Unhandled tool '{tool_name}'")
+    return None, f"Unknown tool '{tool_name}'."

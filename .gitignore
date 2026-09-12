@@ -1,4 +1,5 @@
 .venv
+.venv-win
 .env
 check.py
 __pycache__

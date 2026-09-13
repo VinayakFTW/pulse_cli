@@ -1,379 +1,467 @@
 # Pulse CLI Agent
 
+<div align="center">
+
+**Autonomous Terminal Agent with Theoretically Infinite LLM Inference**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![FreeLLMAPI](https://img.shields.io/badge/LLM%20Gateway-FreeLLMAPI-blueviolet.svg)](https://github.com/tashfeenahmed/freellmapi)
+
+</div>
+
+---
+
 ## Overview
 
-**Pulse CLI** is a specialized command-line agent extracted from the larger **PulseAI** assistant project. While the full PulseAI system includes voice interaction, general conversation capabilities, and multi-modal features, Pulse CLI focuses specifically on executing terminal commands and performing system-level tasks through natural language instructions.
+**Pulse CLI** is a specialized, autonomous command-line agent designed to translate natural language goals into verified terminal actions. Extracted from the larger **PulseAI** personal assistant ecosystem, Pulse CLI acts as an intelligent pair programmer and shell executor directly on your host machine.
 
-Pulse CLI acts as an intelligent shell command executor that can:
-- Understand high-level task descriptions in natural language
-- Break down complex tasks into sequential shell commands
-- Execute commands autonomously with verification and error handling
-- Adapt its approach based on command outputs and errors
+Pulse CLI operates with **theoretically infinite tokens** by coupling directly with [**FreeLLMAPI**](https://github.com/tashfeenahmed/freellmapi) — a local AI gateway that aggregates free tiers across **34+ AI providers** (~7.4 billion free tokens/month across 635+ model endpoints) with smart routing and automatic rate-limit failovers. When one provider hits a rate limit or cooldown, requests seamlessly shift to another free tier, providing uninterrupted autonomous task execution without API bills.
+
+### Key Capabilities
+- 🎯 **Dual Intent Architecture**: Intelligently classifies requests into general conversation or autonomous CLI tasks via `PULSE.md`.
+- 🔄 **Think-Act-Observe Loop**: Methodically reasons through tasks, breaks them down into discrete operations, observes tool output, and adapts dynamically.
+- 🛡️ **Autonomous Verification Guardrails**: Enforces that newly written scripts or programs must be executed and verified before concluding a task.
+- 📁 **Native File I/O Tools**: Dedicated UTF-8 file creation (`write_file`) and inspection (`read_file`) primitives eliminate messy shell piping.
+- 🎤 **Voice & Text Dual Input**: Supports both hands-free voice commands (Google Speech Recognition) and conventional text input.
+- 🔊 **Local Spoken Feedback**: Integrated **Soprano TTS** for responsive local speech synthesis.
+- ⚡ **Theoretically Infinite Tokens**: Powered by FreeLLMAPI's encrypted multi-provider pooling (Google Gemini, Groq, Cerebras, Mistral, HuggingFace, OpenRouter, and more).
+
+---
 
 ## Architecture
 
-The system operates in two primary modes:
+Pulse CLI employs a layered architecture separating natural language orchestration from upstream model inference:
 
-### 1. **Router Mode**
-The initial layer that determines whether a user query requires CLI operations or is a general conversation. The router analyzes the intent and dispatches to the appropriate handler.
+```mermaid
+flowchart TD
+    subgraph InputLayer["1. Input & Speech Layer"]
+        User(["User"]) --> ModeSelect{"Input Mode"}
+        ModeSelect -->|Voice| SpeechRec["Google Speech Recognition (pulse_ear)"]
+        ModeSelect -->|Text| TextInput["Console Text Input"]
+    end
 
-### 2. **CLI Agent Mode**
-A specialized agentic loop that:
-- Receives a high-level task description
-- Plans and executes shell commands step-by-step
-- Verifies command success before proceeding
-- Handles errors and adapts its strategy
-- Continues until the task is complete (up to 10 steps)
+    subgraph RouterLayer["2. Intent Classification Layer"]
+        SpeechRec --> Router["Intent Router (PULSE.md)"]
+        TextInput --> Router
+        Router -->|Conversation| DirectChat["Direct Response & Soprano TTS"]
+        Router -->|CLI Task| AgentLoop["CLI Agent Loop (pulse_brain)"]
+    end
 
-## Key Features
+    subgraph ExecutionLayer["3. Execution & Tool Layer"]
+        AgentLoop --> StepCheck{"Think -> Act -> Observe"}
+        StepCheck --> ToolWrite["write_file (pulse_tools)"]
+        StepCheck --> ToolRead["read_file (pulse_tools)"]
+        StepCheck --> ToolShell["execute_shell_command (pulse_tools)"]
+        StepCheck --> ToolFinish["finish (Verification Guardrails)"]
+    end
 
-### 🧠 **Dual Model Support**
-- **Local Inference**: Uses Meta's Llama 3.2 3B Instruct model for offline operation
-- **Cloud Fallback**: Automatically switches to Google's Gemini 2.5 Pro API if local model fails
-- Seamless transition between models without user intervention
+    subgraph GatewayLayer["4. Upstream Gateway (FreeLLMAPI)"]
+        AgentLoop -.->|"OpenAI Wire API - v1"| FreeLLM["FreeLLMAPI Gateway :3001"]
+        FreeLLM --> SmartRouter["Smart Routing & Failover Engine"]
+        FreeLLM --> KeyVault["AES-256 Encrypted Key Vault"]
+        FreeLLM --> QuotaTracker["Per-Key Rate & RPM/TPM Tracker"]
+    end
 
-### 🎤 **Flexible Input Modes**
-- **Voice Mode**: Natural voice commands using Google Speech Recognition
-- **Text Mode**: Traditional text-based CLI interaction
-- User selects preferred mode at startup
+    subgraph Providers["5. Free LLM Providers - ~7.4B Tokens/Month"]
+        SmartRouter --> P1["Google AI Studio - Gemini"]
+        SmartRouter --> P2["Groq - Llama / Mixtral"]
+        SmartRouter --> P3["Cerebras - Ultra-fast Llama"]
+        SmartRouter --> P4["Mistral AI"]
+        SmartRouter --> P5["HuggingFace / OpenRouter / Others"]
+    end
+```
 
-### 🔄 **Agentic Task Execution**
-The CLI agent follows a Think-Act-Observe loop:
-1. **Think**: Analyzes the task and command history to plan the next step
-2. **Act**: Executes a shell command using the available tool
-3. **Observe**: Processes command output and adjusts strategy
-4. **Repeat**: Continues until task completion or step limit
+### The Autonomous CLI Agent Loop
 
-### 🛡️ **Safety Features**
-- Rate limiting to prevent API quota exhaustion (32-second delay between requests)
-- Context awareness (checks current directory, verifies file existence)
-- Error handling with adaptive retry mechanisms
-- Conversation history persistence (maintains last 20 exchanges)
+When a CLI task is detected, Pulse CLI executes a self-correcting agentic loop:
+1. **Think**: Evaluates current system state, directory contents, and previous command feedback.
+2. **Act**: Issues a structured JSON action:
+   - `write_file`: Safely writes code/config files to disk with UTF-8 encoding.
+   - `read_file`: Inspects existing code, configuration files, or logs.
+   - `execute_shell_command`: Runs terminal commands, tests, or system utilities.
+   - `finish`: Concludes the task once verification criteria are met.
+3. **Observe**: Captures standard output, standard error, and exit codes.
+4. **Verify**: If errors occur, the agent reflects on the error message, edits the file, and re-tests. The agent is blocked from calling `finish` if errors are unaddressed or files remain unexecuted.
 
-### 📝 **Conversation History**
-- Automatically saves conversation history to `conversation_history.json`
-- Maintains context across sessions
-- Limits history to prevent token overflow (system prompt + last 20 messages)
+---
 
 ## System Requirements
 
 ### Hardware
-- **For Local Model**:
-  - GPU with CUDA support (recommended)
-  - Minimum 8GB VRAM
-  - 16GB+ system RAM
-- **For OpenAI API Only**:
-  - Any modern CPU
-  - Stable internet connection
+- **Operating System**: Windows 10/11, macOS, or Linux (Ubuntu, Debian, Fedora, Arch).
+- **RAM**: 4GB minimum (8GB+ recommended).
+- **Storage**: ~500MB for Pulse CLI dependencies.
+- **Audio**: Microphone (for Voice Mode) and speakers/headphones (for Soprano TTS).
 
-### Software
-- Python 3.8 or higher
-- CUDA Toolkit (for GPU acceleration with local model)
-- Operating System: Windows, Linux, or macOS
+### Software Prerequisites
+- **Python**: 3.10 or higher.
+- **Docker & Docker Compose** (Recommended for running FreeLLMAPI) OR **Node.js 20+**.
+- **Git** installed on your system path.
 
-## Installation & Setup
+---
 
-### Step 1: Clone the Repository
+## Setup Guide
 
-```bash
-git clone https://github.com/VinayakFTW/pulse_cli
-cd pulse-cli
+Setting up Pulse CLI involves two simple parts:
+1. **Setting up FreeLLMAPI** (provides the local OpenAI-compatible inference gateway).
+2. **Setting up Pulse CLI** (the terminal agent itself).
+
+---
+
+### Part 1: Setting Up FreeLLMAPI (Dependency)
+
+[**FreeLLMAPI**](https://github.com/tashfeenahmed/freellmapi) aggregates free inference tiers from 34 providers into a single local OpenAI-compatible endpoint (`http://localhost:3001/v1`).
+
+Choose one of the following methods to run FreeLLMAPI:
+
+#### Option A: Docker Compose (Recommended)
+
+Docker is the cleanest cross-platform way to run FreeLLMAPI.
+
+**On Windows (PowerShell):**
+```powershell
+# 1. Clone the repository
+git clone https://github.com/tashfeenahmed/freellmapi.git
+cd freellmapi
+
+# 2. Generate a secure 32-byte AES encryption key
+$Bytes = New-Object Byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($Bytes)
+$ENCRYPTION_KEY = -join ($Bytes | ForEach-Object { "{0:x2}" -f $_ })
+
+# 3. Create the .env configuration
+"ENCRYPTION_KEY=$ENCRYPTION_KEY`nPORT=3001" | Out-File -Encoding utf8 .env
+
+# 4. Start the container
+docker compose up -d
 ```
 
-### Step 2: Create Virtual Environment
-
+**On Linux / macOS (Bash):**
 ```bash
-python -m venv .venv
+# 1. Clone the repository
+git clone https://github.com/tashfeenahmed/freellmapi.git
+cd freellmapi
 
+# 2. Generate key and write .env
+ENCRYPTION_KEY="$(openssl rand -hex 32)"
+printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
+
+# 3. Start the container
+docker compose up -d
+```
+
+> **Tip**: You can also use the one-liner script on macOS/Linux:
+> ```bash
+> curl -fsSL https://freellmapi.co/install.sh | bash
+> ```
+
+#### Option B: Windows Desktop Application (.exe)
+
+If you prefer not to use Docker on Windows:
+1. Download the latest installer from [FreeLLMAPI Releases](https://github.com/tashfeenahmed/freellmapi/releases/latest).
+2. Run the installer and launch the application.
+3. The dashboard will automatically start on `http://localhost:3001`.
+
+#### Option C: Local Node.js Development Server
+
+If you have Node.js 20+ and npm:
+```bash
+git clone https://github.com/tashfeenahmed/freellmapi.git
+cd freellmapi
+npm install
+
+# On Windows PowerShell:
+$ENCRYPTION_KEY = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+"ENCRYPTION_KEY=$ENCRYPTION_KEY`nPORT=3001" | Out-File -Encoding utf8 .env
+
+# On Linux/macOS:
+ENCRYPTION_KEY="$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
+printf "ENCRYPTION_KEY=%s\nPORT=3001\n" "$ENCRYPTION_KEY" > .env
+
+npm run dev
+```
+
+---
+
+#### Configuring FreeLLMAPI & Adding Free Provider Keys
+
+1. Open your browser to **[http://localhost:3001](http://localhost:3001)**.
+2. Click on the **Keys** tab in the top navigation.
+3. Add API keys for one or more free providers. FreeLLMAPI will automatically rotate and failover between them:
+   - **Google AI Studio**: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) (Free Gemini 2.0 / 2.5 models, high RPM)
+   - **Groq**: [console.groq.com/keys](https://console.groq.com/keys) (Extremely fast inference for Llama 3.3, Mixtral)
+   - **Cerebras**: [cloud.cerebras.ai](https://cloud.cerebras.ai) (Ultra-low latency Llama inference)
+   - **Mistral AI**: [console.mistral.ai](https://console.mistral.ai) (Free tier access to Mistral Small/Nemo)
+   - **OpenRouter**: [openrouter.ai/keys](https://openrouter.ai/keys) (Aggregates multiple free community models)
+   - **HuggingFace**: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) (Free Serverless Inference API)
+4. **Copy your Unified API Key**:
+   - In the header of the **Keys** page, you will see your generated **Unified API Key**.
+   - Copy this key — you will paste it into Pulse CLI's `.env`.
+
+> [!TIP]
+> **Why "Theoretically Infinite Tokens"?**
+> Each free provider offers between 500,000 to several million free tokens every day. By stacking keys across 4 to 8 providers, FreeLLMAPI gives you a pool of billions of free tokens per month. When one provider temporarily hits its rate limit (HTTP 429), FreeLLMAPI automatically switches to the next available provider in your chain without interrupting Pulse CLI.
+
+---
+
+### Part 2: Setting Up Pulse CLI
+
+Now that FreeLLMAPI is running, set up Pulse CLI:
+
+#### Step 1: Clone Pulse CLI
+```bash
+git clone https://github.com/VinayakFTW/pulse_cli.git
+cd pulse_cli
+```
+
+#### Step 2: Create a Virtual Environment
+Using standard Python `venv`:
+```bash
 # On Windows
+python -m venv .venv
 .venv\Scripts\activate
 
-# On Linux/Mac
+# On Linux / macOS
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### Step 3: Install Dependencies
+*(Optional: If you use [`uv`](https://docs.astral.sh/uv/): `uv venv && .venv\Scripts\activate`)*
 
+#### Step 3: Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-**For GPU support with PyTorch:**
+> [!NOTE]
+> **Audio Requirements on Linux:**
+> If you are on Linux and want to use Voice Mode, install PortAudio development headers before installing PyAudio:
+> ```bash
+> sudo apt-get update && sudo apt-get install -y portaudio19-dev python3-pyaudio
+> ```
+
+#### Step 4: Configure Environment Variables
+
+Create a `.env` file in the root of `pulse_cli` (you can copy `.env.example`):
 ```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Linux / macOS
+cp .env.example .env
 ```
 
-### Step 4: Configure Environment Variables
-
-Create a `.env` file in the project root:
-
+Edit `.env` and fill in your FreeLLMAPI credentials:
 ```env
-OPENAI_API_KEY=your_gemini_api_key_here
+# Point to your local FreeLLMAPI instance
+OPENAI_API_BASE=http://localhost:3001/v1
+
+# Paste your Unified API Key from the FreeLLMAPI Keys page
+OPENAI_API_KEY=your_freellmapi_unified_key_here
 ```
 
-**To obtain a OpenAI API key:**
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Sign in with your Google account
-3. Create a new API key
-4. Copy the key to your `.env` file
-
-### Step 5: Hugging Face Configuration (For Local Model)
-
-Meta's Llama 3.2 3B Instruct is a **gated repository** on Hugging Face, requiring explicit access approval.
-
-#### 5.1: Request Access
-1. Visit [meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
-2. Click "Request Access" and accept Meta's license agreement
-3. Wait for approval (usually within minutes to hours)
-
-#### 5.2: Install Hugging Face CLI
+#### Step 5: Verify the Setup
+Test that Pulse CLI can reach FreeLLMAPI:
 ```bash
-pip install huggingface_hub
+python -c "from pulse_brain.llm_interface import load_openai_model; client, _ = load_openai_model(); print('Connection Successful!')"
 ```
+If configured correctly, it will print `Connection Successful!`.
 
-#### 5.3: Login to Hugging Face
-```bash
-huggingface-cli login
-```
-
-When prompted, provide your Hugging Face token:
-1. Go to [Hugging Face Tokens](https://huggingface.co/settings/tokens)
-2. Create a new token with "Read" permissions
-3. Copy and paste the token when prompted in the terminal
-
-#### 5.4: Verify Access
-```bash
-huggingface-cli whoami
-```
-
-This should display your Hugging Face username, confirming successful authentication.
-
-### Step 6: Verify Installation
-
-Run the agent:
-```bash
-python cli_agent.py
-```
-
-You should see:
-```
-Initializing PulseAI...
-Attempting to load local model: meta-llama/Llama-3.2-3B-Instruct...
-```
-
-If the local model loads successfully, you're ready to go. If it fails, the system will automatically fall back to Gemini API.
+---
 
 ## Usage
 
-### Starting the Agent
-
+Start the Pulse CLI assistant:
 ```bash
 python cli_agent.py
 ```
 
-### Selecting Input Mode
+### 1. Select Input Mode
+Upon launching, choose between voice commands and text commands:
+```text
+Initializing PulseAI...
+OpenAI API loaded successfully.
 
-On startup, choose your preferred input mode:
-```
 Select Input Mode:
 1. Voice Mode (Default)
 2. Text Mode
-Choice (1/2):
+Choice (1/2): 2
 ```
 
-### Example Interactions
-
-#### Voice Mode Example:
+### 2. Configure Spoken Feedback (TTS)
+In text mode, you can enable or disable **Soprano TTS** voice feedback:
+```text
+Starting in TEXT mode.
+Enable spoken responses with Soprano TTS? (Y/n): n
+Spoken responses: DISABLED
 ```
-Listening... (Google Online)
-Recognized: create a python script named test.py that prints hello world
 
-CLI Agent Activated. Task: create a python script named test.py that prints hello world
+### 3. Example Interactions
+
+#### Scenario A: Autonomous Code Creation & Verification
+```text
+Vinayak (Text): create a python script that solves the quadratic equation for a=1, b=-5, c=6, and run it
+
+Tool command received: [TOOL: cli_agent, task: create and run a python script to solve the quadratic equation for a=1, b=-5, c=6]
+CLI Agent Activated. Task: create and run a python script to solve the quadratic equation for a=1, b=-5, c=6
 Thinking (Step 1)...
-CLI Agent Thought: I will create the file using echo command
-Running command: echo "print('Hello World')" > test.py
-CLI Agent Observation: Command executed successfully.
-...
+CLI Agent Thought: I will write a python script using write_file to compute the roots of the quadratic equation.
+CLI Agent Observation: File 'quadratic.py' written successfully (284 characters).
+
+Thinking (Step 2)...
+CLI Agent Thought: Now I must execute the script and verify the calculated roots.
+Running command: python quadratic.py
+CLI Agent Observation: Roots: x1 = 3.0, x2 = 2.0
+
+Thinking (Step 3)...
+CLI Agent Thought: The script ran successfully and produced the correct roots (3.0 and 2.0). Verification complete.
 CLI Task Complete.
-```
-
-#### Text Mode Example:
-```
-Vinayak (Text): create a directory called projects and add a readme file
-
 Executed tool: cli_agent
 Result: CLI task finished.
 ```
 
-### Sample Tasks
+#### Scenario B: General Conversation / Concept Explanation
+```text
+Vinayak (Text): what is the difference between TCP and UDP?
 
-The CLI agent can handle tasks like:
-- **File Operations**: `create a config.json file with default settings`
-- **Git Operations**: `initialize a git repository and make first commit`
-- **System Info**: `show me the current disk usage`
-- **Script Creation**: `write a bash script that backs up my documents folder`
-- **Development Setup**: `create a python virtual environment and install flask`
-
-## Project Structure
-
-```
-pulse-cli/
-├── cli_agent.py              # Main entry point
-├── pulse_brain/
-│   ├── brain.py              # CLI agent loop logic
-│   └── llm_interface.py      # LLM interaction layer
-├── pulse_config/
-│   └── config.py             # System prompts and configuration
-├── pulse_ear/
-│   └── speech_handler.py     # Voice input/output handlers
-├── pulse_tools/
-│   └── general_tools.py      # Shell command execution
-├── requirements.txt          # Python dependencies
-├── .env                      # Environment variables (not in repo)
-└── .gitignore
+PulseAI (openai): TCP is connection-oriented and ensures reliable, ordered packet delivery with error-checking and flow control (used in web browsing and email). UDP is connectionless and sends packets without delivery guarantees, offering significantly lower latency (ideal for video streaming and online gaming).
 ```
 
-## How It Works
-
-### 1. Query Processing Flow
-
+#### Scenario C: System Diagnostics & Exploration
+```text
+Vinayak (Text): list all files in the current directory and check disk space
 ```
-User Input → Router (decides: CLI task or chat)
-    ↓
-    ├─→ [CHAT] → Direct response
-    │
-    └─→ [TOOL: cli_agent, task: ...] → CLI Agent Loop
-            ↓
-            Think → Act → Observe (repeat until done)
-            ↓
-            Task Complete
-```
-
-### 2. CLI Agent Decision Format
-
-The agent uses structured JSON responses:
-```json
-{
-  "thought": "Reasoning about the next step",
-  "action": "execute_shell_command",
-  "arguments": {
-    "command": "ls -la"
-  }
-}
-```
-
-Or to finish:
-```json
-{
-  "thought": "Task is complete",
-  "action": "finish",
-  "arguments": {}
-}
-```
-
-### 3. Rate Limiting Strategy
-
-To prevent API quota issues:
-- Tracks timestamp of last API request
-- Enforces 32-second minimum delay between consecutive requests
-- Displays countdown when waiting
-- Only applies to CLI agent loop (not initial router check)
-
-## Troubleshooting
-
-### Local Model Fails to Load
-
-**Error**: `System incapable of running local model`
-
-**Solutions**:
-1. Verify GPU availability: `nvidia-smi` (for NVIDIA GPUs)
-2. Check CUDA installation: `nvcc --version`
-3. Ensure Hugging Face access is granted
-4. Verify you're logged in: `huggingface-cli whoami`
-5. System will automatically fall back to Gemini API
-
-### Voice Recognition Issues
-
-**Error**: `Sorry, I didn't understand that`
-
-**Solutions**:
-1. Check microphone permissions
-2. Verify internet connection (required for Google Speech Recognition)
-3. Speak clearly and reduce background noise
-4. Switch to text mode as alternative
-
-### Gemini API Errors
-
-**Error**: `I encountered an error reaching the Gemini API`
-
-**Solutions**:
-1. Verify API key in `.env` file
-2. Check API quota at [Google AI Studio](https://aistudio.google.com/)
-3. Ensure stable internet connection
-4. Wait for rate limit reset if exceeded
-
-### Command Execution Failures
-
-If CLI commands fail repeatedly:
-1. Check command syntax for your OS (Windows vs. Linux/Mac)
-2. Verify file permissions
-3. Review command history in conversation logs
-4. Try simpler commands to isolate the issue
-
-## Limitations
-
-- **Step Limit**: CLI agent has a maximum of 10 steps per task
-- **No Interactive Commands**: Cannot handle commands requiring user input (use `yes` or heredocs)
-- **Platform Differences**: Some commands differ between Windows and Unix systems
-- **Network Dependency**: Voice mode requires internet for speech recognition
-- **Context Window**: Limited to recent conversation history (20 messages)
-
-## Future Enhancements (Full PulseAI)
-
-The complete PulseAI system includes:
-- Multi-modal capabilities (image, document processing)
-- Persistent memory across sessions
-- Additional tool integrations (web browsing, email, calendar)
-- Enhanced voice synthesis with Piper TTS
-- Offline speech recognition with Whisper
-- Custom wake word detection
-- Scheduled task execution
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## License
-
-MIT License
-
-Copyright (c) 2025 Vinayak Varshney
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-## Acknowledgments
-
-- Meta AI for Llama 3.2 3B Instruct
-- Google for Gemini 2.5 Pro API
-- Hugging Face for model hosting and transformers library
-- Open source community for supporting libraries
+Pulse CLI creates and executes the appropriate platform-specific commands (`dir` or `ls`, `df` or PowerShell storage cmdlets), reads the output, and reports back.
 
 ---
 
-**Note**: This is a development tool that executes shell commands on your system. Always review the commands the agent plans to execute and use appropriate caution, especially with destructive operations.
+## Project Structure
+
+```text
+pulse_cli/
+├── cli_agent.py              # Main application entry point & interactive shell
+├── PULSE.md                  # Unified system prompt specifications (Router & CLI Agent)
+├── conversation_history.json # Persistent session conversation logs
+├── pulse_brain/              # Agent reasoning and LLM interface
+│   ├── brain.py              # Autonomous Think-Act-Observe loop & verification guardrails
+│   └── llm_interface.py      # OpenAI-compatible API client & tool dispatcher
+├── pulse_config/             # Configuration & prompt loaders
+│   └── config.py             # Environment loader, PromptManager, and history management
+├── pulse_ear/                # Voice processing and speech synthesis
+│   └── speech_handler.py     # SpeechRecognition and Soprano TTS engine
+├── pulse_tools/              # Host tools executed by the agent
+│   └── general_tools.py      # write_file, read_file, and execute_shell_command
+├── requirements.txt          # Python runtime dependencies
+├── pyproject.toml            # Project metadata and tool definitions
+├── .env.example              # Template environment configuration
+└── .gitignore                # Git exclusions
+```
+
+---
+
+## How It Works
+
+### 1. Intent Routing (`PULSE.md`)
+User input is first evaluated by the **Router System Prompt**. The router distinguishes between conversational queries and practical tasks:
+- **Conversation**: Answered directly by the LLM.
+- **CLI Agent Task**: Emits `[TOOL: cli_agent, task: <description>]`, handing off execution to the autonomous loop.
+
+### 2. Autonomous Guardrails
+In `pulse_brain/brain.py`, several guardrails ensure reliability:
+- **Execution Mandate**: If an agent writes a script with `write_file`, it is prohibited from terminating via `finish` until it has executed the script using `execute_shell_command` and verified the output.
+- **Error Recovery**: If a shell command exits with an error code or exception, the agent is notified via `Tool Output` and must formulate a fix before finishing.
+- **Step Limit**: Tasks are limited to 10 autonomous iterations to prevent runaway loops.
+
+---
+
+## Troubleshooting
+
+### 1. FreeLLMAPI Connection Issues
+**Error**: `CRITICAL: Failed to load OpenAI API: Connection refused` or `Cannot connect to host localhost:3001`
+- **Cause**: FreeLLMAPI is not running, or is listening on a different port.
+- **Solution**:
+  1. Verify FreeLLMAPI is running: visit `http://localhost:3001` in your browser.
+  2. If using Docker, check container status: `docker ps`.
+  3. Ensure `OPENAI_API_BASE` in `.env` is set to `http://localhost:3001/v1` (the `/v1` suffix is required).
+
+### 2. 401 Unauthorized / Invalid Key
+**Error**: `OpenAI Error: 401 Unauthorized`
+- **Cause**: The `OPENAI_API_KEY` in `.env` does not match the Unified API Key shown on FreeLLMAPI's Keys page.
+- **Solution**: Copy the Unified API Key from the top-right header of `http://localhost:3001` into your `.env`.
+
+### 3. Provider Rate Limits & Cooldowns
+**Error**: `All providers exhausted` or slow responses
+- **Cause**: The free providers you added in FreeLLMAPI are hitting temporary rate limits.
+- **Solution**: Open `http://localhost:3001`, go to the **Keys** page, and add additional free providers (e.g. add Groq, Cerebras, and Google AI Studio simultaneously). FreeLLMAPI will distribute requests across all active keys.
+
+### 4. Voice Mode / Microphone Issues
+**Error**: `Speech recognition could not understand audio` or `PyAudio error`
+- **Solution**:
+  - Ensure a default input microphone is selected in your OS settings.
+  - On Windows: Check Privacy settings > Allow apps to access your microphone.
+  - On Linux: Ensure `portaudio19-dev` and `python3-pyaudio` are installed.
+  - Alternatively, choose **Text Mode** (Option 2) at startup.
+
+### 5. Running FreeLLMAPI in Docker from WSL or LAN
+- If running FreeLLMAPI on Docker and accessing it across machines or WSL, start the container with `HOST_BIND=0.0.0.0`:
+  ```bash
+  HOST_BIND=0.0.0.0 docker compose up -d
+  ```
+
+---
+
+## Contributing
+
+Contributions to Pulse CLI are welcome! Please feel free to open issues, submit pull requests, or propose new agent capabilities.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more details.
+
+---
+
+## Roadmap
+
+### 1. Skills & Core Capabilities Integration
+- [ ] Define modular skill interface and base class schema
+- [ ] Implement local capability registry and dynamic discovery
+- [ ] Add tool-use parsing and parameter validation logic
+- [ ] Implement skill memory, execution tracing, and error handling
+
+### 2. WhatsApp API Integration
+- [ ] Set up WhatsApp API & webhook endpoint
+- [ ] Implement incoming message webhook receiver and signature verification
+- [ ] Add media/text parser for WhatsApp payloads
+- [ ] Implement session manager for mapping chat IDs to conversation state
+- [ ] Build outbound message formatting and delivery dispatch
+
+### 3. Model Context Protocol (MCP) Integration
+- [ ] Implement MCP Client protocol layer (stdio & SSE transports)
+- [ ] Build MCP server configuration manager (`mcp_config.json`)
+- [ ] Implement tool and resource discovery from connected MCP servers
+- [ ] Connect filesystem, web-search, and custom database MCP servers
+- [ ] Map MCP tool schemas directly to LLM runtime execution pipeline
+
+### 4. Agent Swarming & Orchestration
+- [ ] Define multi-agent roles, system prompts, and individual tool allocations
+- [ ] Implement handoff/routing protocol for delegating subtasks
+- [ ] Build shared blackboard/state memory for cross-agent collaboration
+- [ ] Implement swarm consensus, aggregation, and final synthesis engine
+- [ ] Add cycle-detection and execution guardrails across swarm nodes
+
+
+## Acknowledgments
+
+- [**FreeLLMAPI**](https://github.com/tashfeenahmed/freellmapi) by Tashfeen Ahmed for the free multi-provider LLM gateway and quota management.
+- [**Soprano TTS**](https://github.com/) for local speech synthesis.
+- [**SpeechRecognition**](https://github.com/Uberi/speech_recognition) for speech input.
+- Meta, Google, Groq, Cerebras, and Mistral for making their models accessible via developer free tiers.

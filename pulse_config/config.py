@@ -19,7 +19,6 @@ ENVIRONMENT = {
 HISTORY_FILE = "conversation_history.json"
 PULSE_MD_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PULSE.md")
 
-# Default fallback prompts in case PULSE.md is missing or unreadable
 _DEFAULT_ROUTER_PROMPT = """You are an intelligent routing agent named Pulse.
 Your sole job is to classify the user's request into either a CLI Task or General Conversation.
 
@@ -179,7 +178,6 @@ def reload_prompts():
     return ROUTER_SYSTEM_PROMPT, CLI_AGENT_SYSTEM_PROMPT
 
 
-# Backwards-compatible prompt exports
 ROUTER_SYSTEM_PROMPT = get_router_prompt()
 CLI_AGENT_SYSTEM_PROMPT = get_cli_agent_prompt()
 
@@ -210,4 +208,4 @@ def load_history():
         except (json.JSONDecodeError, IndexError, Exception):
             return [{"role": "system", "content": router_prompt}]
     else:
-        return [{"role": "system", "content": router_prompt}]
+        return [{"role": "system", "content": router_prompt}]

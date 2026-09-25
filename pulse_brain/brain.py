@@ -12,19 +12,16 @@ def extract_json_decision(response_str):
     """
     cleaned = response_str.strip()
     
-    # Strip markdown code blocks
     if "```json" in cleaned:
         cleaned = cleaned.split("```json")[1].split("```")[0].strip()
     elif "```" in cleaned:
         cleaned = cleaned.split("```")[1].split("```")[0].strip()
 
-    # Try direct parse
     try:
         return json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Use raw_decode starting from the first '{'
     start_idx = cleaned.find("{")
     if start_idx != -1:
         decoder = json.JSONDecoder()
@@ -35,7 +32,6 @@ def extract_json_decision(response_str):
         except Exception:
             pass
 
-    # Fallback to regex search
     match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
     if match:
         try:
@@ -62,14 +58,11 @@ def start_cli_agent_loop(task_description, query_func, model_type):
 
     for step in range(10):
         try:
-            # --- 1. THINK ---
             print(f"Thinking (Step {step+1})...")
             response_str = query_func(history)
             
-            # Record raw assistant output in history
             history.append({"role": "assistant", "content": response_str})
 
-            # Robust JSON extraction
             ai_decision = extract_json_decision(response_str)
             thought = ai_decision.get("thought", "...")
             action = ai_decision.get("action")
@@ -77,9 +70,7 @@ def start_cli_agent_loop(task_description, query_func, model_type):
 
             print(f"CLI Agent Thought: {thought}")
 
-            # --- 2. ACT & GUARDRAIL CHECKS ---
             if action == "finish":
-                # Guardrail 1: Previous action resulted in an error
                 if last_action_failed:
                     guardrail_msg = (
                         "Error: You cannot finish yet because your last action failed with an error. "
@@ -89,7 +80,6 @@ def start_cli_agent_loop(task_description, query_func, model_type):
                     history.append({"role": "user", "content": guardrail_msg})
                     continue
 
-                # Guardrail 2: Files were created/written but never verified via execution
                 if files_written and not commands_executed:
                     files_list = ", ".join(files_written)
                     guardrail_msg = (

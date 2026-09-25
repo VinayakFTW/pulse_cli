@@ -5,6 +5,10 @@ from pulse_brain.brain import start_cli_agent_loop
 from pulse_config.config import ENVIRONMENT
 import re
 
+class Agent:
+    def __init__(self, name: str):
+        self.name = name
+
 def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"],base_url=ENVIRONMENT["OPENAI_API_BASE"]):
     """Configures and returns the OpenAI client."""
     if not api_key or base_url is None:
@@ -98,7 +102,6 @@ def tool_dispatcher(response, model_obj, terminators=None, model_type="local"):
     tool_name, params = parse_tool_call(response)
 
     if not tool_name:
-        # Normal conversational response from router
         return None, None
     elif tool_name == "cli_agent":
         task_description = params.get('task')

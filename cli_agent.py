@@ -1,35 +1,22 @@
 from dotenv import load_dotenv
 load_dotenv()
 import time
-import sys
 
-from pulse_ear.speech_handler import command, speak, set_tts_enabled
+from pulse_ear.speech_handler import speak, set_tts_enabled,get_user_input
 from pulse_config.config import *
 from pulse_brain.llm_interface import tool_dispatcher, load_openai_model, generate_response
 
-def get_user_input(mode="voice"):
-    if mode == "text":
-        try:
-            return input("\nVinayak (Text): ").strip()
-        except EOFError:
-            return "0"
-    else:
-        return command()
 
 if __name__ == '__main__':
     
     llm_pipeline = None
     terminators = None
     model_type = "local"
-    
-    print("Initializing PulseAI...")
-    model_type = "local"
+
     try:
         llm_pipeline, model_type = load_openai_model()
-        print("OpenAI API loaded successfully.")
     except Exception as gemini_e:
-        print(f"CRITICAL: Failed to load OpenAI API as well: {gemini_e}")
-        sys.exit(1)
+        raise f"CRITICAL: Failed to load OpenAI API as well: {gemini_e}"
 
     print("\nSelect Input Mode:")
     print("1. Voice Mode (Default)")

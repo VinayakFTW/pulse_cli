@@ -1,7 +1,6 @@
 import os
 import sys
 import platform
-import json
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,7 +12,6 @@ from pulse_config.config import (
     get_cli_agent_prompt,
     get_full_pulse_prompt,
     reload_prompts,
-    load_history,
     PromptManager,
     extract_prompt_section,
     format_prompt,
@@ -69,14 +67,6 @@ def test_reload_prompts():
     assert c == get_cli_agent_prompt()
     print("    PASSED: Prompt reloading functions as expected.")
 
-def test_load_history():
-    print("[7] Testing load_history() integration...")
-    history = load_history()
-    assert len(history) >= 1
-    assert history[0]["role"] == "system"
-    assert history[0]["content"] == get_router_prompt()
-    print("    PASSED: History initializes with dynamic router prompt.")
-
 if __name__ == "__main__":
     print("--- Starting PULSE.md Verification Tests ---")
     test_pulse_md_existence()
@@ -85,5 +75,5 @@ if __name__ == "__main__":
     test_prompt_json_structure()
     test_fallback_behavior()
     test_reload_prompts()
-    test_load_history()
     print("\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
+

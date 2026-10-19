@@ -1,10 +1,19 @@
 import platform
-import json
 import os
 import re
 from dotenv import load_dotenv
 
-load_dotenv()
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 1. Load package core .env (guarantees API keys are found regardless of invocation directory)
+load_dotenv(os.path.join(PACKAGE_ROOT, ".env"))
+
+# 2. Load global user .env (~/.pulse/.env)
+load_dotenv(os.path.expanduser("~/.pulse/.env"))
+
+# 3. Allow workspace-local .env to override if present
+load_dotenv(os.path.join(os.getcwd(), ".env"), override=True)
+
 os_name = platform.platform()
 
 LOCAL_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
@@ -16,8 +25,11 @@ ENVIRONMENT = {
     "OPENWA_API_BASE": os.getenv("OPENWA_API_BASE"),
     "OPENWA_SESSION_ID": os.getenv("OPENWA_SESSION_ID"),
 }
-HISTORY_FILE = "conversation_history.json"
-PULSE_MD_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PULSE.md")
+
+WORKSPACE_PULSE_MD = os.path.join(os.getcwd(), "PULSE.md")
+PACKAGE_PULSE_MD = os.path.join(PACKAGE_ROOT, "PULSE.md")
+PULSE_MD_PATH = WORKSPACE_PULSE_MD if os.path.exists(WORKSPACE_PULSE_MD) else PACKAGE_PULSE_MD
+
 
 _DEFAULT_ROUTER_PROMPT = """You are an intelligent routing agent named Pulse.
 Your sole job is to classify the user's request into either a CLI Task or General Conversation.
@@ -181,31 +193,3 @@ def reload_prompts():
 ROUTER_SYSTEM_PROMPT = get_router_prompt()
 CLI_AGENT_SYSTEM_PROMPT = get_cli_agent_prompt()
 
-
-def save_history(history):
-    try:
-        with open(HISTORY_FILE, 'w', encoding="utf-8") as f:
-            json.dump(history, f, indent=4)
-    except Exception as e:
-        print(f"Error saving history: {e}")
-
-def load_history():
-    router_prompt = get_router_prompt()
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding="utf-8") as f:
-                history = json.load(f)
-                
-                if not history or history[0].get('role') != 'system':
-                    return [{"role": "system", "content": router_prompt}]
-                
-                history[0]['content'] = router_prompt
-                
-                if len(history) > 21:
-                    history = [history[0]] + history[-20:]
-                
-                return history
-        except (json.JSONDecodeError, IndexError, Exception):
-            return [{"role": "system", "content": router_prompt}]
-    else:
-        return [{"role": "system", "content": router_prompt}]

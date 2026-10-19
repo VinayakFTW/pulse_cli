@@ -21,4 +21,8 @@ def test_history_awareness():
         input=hist
     )
     print("RESPONSE TO FAILED TOOL OUTPUT:\n", res.output_text)
+
+if __name__ == "__main__":
+    test_history_awareness()
+
     

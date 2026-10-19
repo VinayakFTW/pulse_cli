@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allowed_directories": [
+      "C:/Users/vinay/AppData/Local/Temp"
+    ],
+    "require_hitl_for_external_access": true,
+    "allow_external_reads": false,
+    "allow_external_writes": false,
+    "auto_approve_external": false
+  },
+  "memory": {
+    "db_path": null
+  }
+}

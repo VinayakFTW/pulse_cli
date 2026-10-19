@@ -3,4 +3,6 @@
 .env
 check.py
 __pycache__
-conversation_history.json
+graphify-out/
+.pulse/
+*.db

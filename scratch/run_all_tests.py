@@ -1,8 +1,15 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from scratch.test_agent_robustness import *
 from scratch.test_history_awareness import *
 from scratch.test_pulse_prompt import *
 from scratch.test_router_classification import *
 from scratch.test_whisper_asr_and_response import *
+from scratch.test_memory_store import *
+from scratch.test_permission_guardrail import test_permission_guardrail_suite
 
 if __name__ == "__main__":
     print("--- Starting PULSE.md Verification Tests ---")
@@ -12,8 +19,15 @@ if __name__ == "__main__":
     test_prompt_json_structure()
     test_fallback_behavior()
     test_reload_prompts()
-    test_load_history()
     print("\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
+
+    print("--- Starting In-Memory Store Test Suite ---")
+    test_memory_store_unit()
+    test_agent_memory_integration()
+    test_persistence_lifecycle()
+    print("\nALL IN-MEMORY STORE TESTS PASSED SUCCESSFULLY!")
+
+
 
     print("--- Starting CLI Agent Robustness Test Suite ---")
     test_json_extractor_resilience()
@@ -29,5 +43,8 @@ if __name__ == "__main__":
     test_live_router_classification()
     print("\nALL ROUTER TESTS COMPLETED SUCCESSFULLY!")
 
-    
+    print("\n--- Starting Permission Guardrail Test Suite ---")
+    test_permission_guardrail_suite()
+    print("\nALL PERMISSION GUARDRAIL TESTS COMPLETED SUCCESSFULLY!")
+
     asr_stt_tests()

@@ -1,15 +1,11 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-import torch
 from openai import OpenAI
-from pulse_brain.brain import start_cli_agent_loop
-from pulse_config.config import ENVIRONMENT
 import re
 
-class Agent:
-    def __init__(self, name: str):
-        self.name = name
+from pulse_brain.brain import start_cli_agent_loop
+from pulse_config.config import ENVIRONMENT
+from pulse_brain.memory_base.memory import Memory
 
-def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"],base_url=ENVIRONMENT["OPENAI_API_BASE"]):
+def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"], base_url=ENVIRONMENT["OPENAI_API_BASE"]):
     """Configures and returns the OpenAI client."""
     if not api_key or base_url is None:
         raise ValueError("OpenAI API key or Base URL not found in Environment variables. Please set OPENAI_API_KEY and OPENAI_API_BASE.")
@@ -18,7 +14,33 @@ def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"],base_url=ENVIRONMENT
     return client, "openai"
 
 
-def query_llm(model_obj, history, model_type="local", terminators=None):
+class Agent:
+    def __init__(self, name: str = "Pulse", session_id: str = "default", context_window: int = 10):
+        self.name = name
+        self.context_window = context_window
+        self.memory = Memory(session_id=session_id)
+        self.client, self.model_type = load_openai_model()
+
+    def remember(self, role: str, content: str) -> None:
+        """Stores a message into the agent's in-memory store."""
+        self.memory.add_message(role, content)
+
+    def get_context(self, limit: int | None = None) -> list[dict[str, str]]:
+        """Retrieves recent conversation turns for context."""
+        return self.memory.get_history(limit=limit or self.context_window)
+
+    def persist_session(self) -> int:
+        """Flushes in-memory session to persistent SQLite storage."""
+        return self.memory.persist_to_db()
+
+    def restore_session(self) -> int:
+        """Restores session records from persistent SQLite storage."""
+        return self.memory.load_from_db()
+
+
+
+
+def query_llm(model_obj, history, model_type="openai"):
     """
     Unified function to query either Local LLM or OpenAI.
     Returns the string response.
@@ -35,7 +57,7 @@ def query_llm(model_obj, history, model_type="local", terminators=None):
                     chat_history.append(msg)
 
             response = model_obj.responses.create(
-                model="gpt-5",
+                model="auto",
                 instructions=system_instruction,
                 input=chat_history,
             )
@@ -46,7 +68,7 @@ def query_llm(model_obj, history, model_type="local", terminators=None):
             print(f"OpenAI Error: {e}")
             return "I encountered an error reaching the OpenAI API."
 
-def generate_response(_query, history, model_obj, terminators=None, model_type="local", is_tool_check=False):
+def generate_response(_query, history, model_obj, model_type="openai", is_tool_check=False):
     """
     Generates a response using the Unified query function.
     """
@@ -54,7 +76,7 @@ def generate_response(_query, history, model_obj, terminators=None, model_type="
         if not is_tool_check:
             history.append({"role": "user", "content": _query})
         
-        response = query_llm(model_obj, history, model_type, terminators)
+        response = query_llm(model_obj, history, model_type)
         
         if not is_tool_check:
             history.append({"role": "assistant", "content": response})
@@ -94,7 +116,7 @@ def parse_tool_call(response):
         print(f"Error parsing tool command: {e}. Full response: {response}")
         return None, None
 
-def tool_dispatcher(response, model_obj, terminators=None, model_type="local"):
+def tool_dispatcher(response, model_obj, model_type="openai"):
     """
     Parses the LLM's tool command and calls the appropriate function.
     Returns (tool_name, tool_result). If response is chat, returns (None, None).
@@ -108,7 +130,7 @@ def tool_dispatcher(response, model_obj, terminators=None, model_type="local"):
         if not task_description:
             task_description = "Execute requested CLI task"
         
-        query_func = lambda hist: query_llm(model_obj, hist, model_type, terminators)
+        query_func = lambda hist: query_llm(model_obj, hist, model_type)
         
         result_message = start_cli_agent_loop(task_description, query_func, model_type)
         return tool_name, result_message

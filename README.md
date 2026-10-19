@@ -270,10 +270,62 @@ If configured correctly, it will print `Connection Successful!`.
 
 ---
 
+## Global CLI Setup (`pulse`)
+
+You can run Pulse globally from **any directory** on your machine with a single command:
+
+```bash
+# Run this once from the project repository to install global wrappers:
+python install_pulse_cli.py
+```
+
+This installs wrapper scripts (`pulse.cmd`, `pulse.ps1`, `pulse`) into your user PATH (`~/.local/bin`), enabling:
+```bash
+# In any project directory:
+cd /path/to/any/project
+pulse
+```
+
+### Workspace Scoping & Human-in-the-Loop (HITL) Guardrail
+
+When launched from any directory:
+- **Active Workspace**: The directory where `pulse` is launched (`os.getcwd()`) is granted **full, unrestricted access** for reading, writing, and executing commands.
+- **External Path Protection**: Any tool action targeting directories outside the active workspace is intercepted by the **Permission Manager** and requires interactive user authorization:
+  ```text
+  ======================================================================
+  [SECURITY ALERT: External Directory Access Requested]
+  Action:           WRITE
+  Target Path:      D:\AnotherProject\config.json
+  Active Workspace: D:\Work\MyActiveProject
+  ======================================================================
+  Authorize this action?
+    [y] Yes (this time only)
+    [a] Always (authorize this directory for remainder of session)
+    [n] No (deny access)
+  ```
+- **Config Override (`pulse_settings.json`)**: You can create a `pulse_settings.json` in your active workspace (or `~/.pulse/pulse_settings.json`) to declare pre-approved paths or customize policy:
+  ```json
+  {
+    "permissions": {
+      "allowed_directories": ["D:\\SharedLibraries"],
+      "require_hitl_for_external_access": true,
+      "allow_external_reads": false,
+      "allow_external_writes": false
+    },
+    "memory": {
+      "db_path": null
+    }
+  }
+  ```
+
+---
+
 ## Usage
 
-Start the Pulse CLI assistant:
+Start the Pulse CLI assistant directly or via the global command:
 ```bash
+pulse
+# OR from the repo:
 python cli_agent.py
 ```
 
@@ -342,12 +394,13 @@ Pulse CLI creates and executes the appropriate platform-specific commands (`dir`
 pulse_cli/
 ├── cli_agent.py              # Main application entry point & interactive shell
 ├── PULSE.md                  # Unified system prompt specifications (Router & CLI Agent)
-├── conversation_history.json # Persistent session conversation logs
-├── pulse_brain/              # Agent reasoning and LLM interface
+├── pulse_brain/              # Agent reasoning, memory store, and LLM interface
 │   ├── brain.py              # Autonomous Think-Act-Observe loop & verification guardrails
-│   └── llm_interface.py      # OpenAI-compatible API client & tool dispatcher
+│   ├── llm_interface.py      # OpenAI-compatible API client, Agent class, & tool dispatcher
+│   └── memory_base/
+│       └── memory.py         # LangGraph InMemoryStore-backed conversation and state memory
 ├── pulse_config/             # Configuration & prompt loaders
-│   └── config.py             # Environment loader, PromptManager, and history management
+│   └── config.py             # Environment loader and PromptManager
 ├── pulse_ear/                # Voice processing and speech synthesis
 │   └── speech_handler.py     # SpeechRecognition and Soprano TTS engine
 ├── pulse_tools/              # Host tools executed by the agent

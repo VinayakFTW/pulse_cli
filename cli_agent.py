@@ -1,22 +1,40 @@
-from dotenv import load_dotenv
-load_dotenv()
+import os
+import sys
 import time
 
-from pulse_ear.speech_handler import speak, set_tts_enabled,get_user_input
-from pulse_config.config import *
-from pulse_brain.llm_interface import tool_dispatcher, load_openai_model, generate_response
+# Ensure package directory is in sys.path regardless of execution directory
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+if PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, PACKAGE_DIR)
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from pulse_ear.speech_handler import speak, set_tts_enabled, get_user_input
+from pulse_config.config import ROUTER_SYSTEM_PROMPT
+from pulse_brain.llm_interface import Agent, tool_dispatcher, generate_response
+from pulse_tools.general_tools import set_workspace_root
 
 
-if __name__ == '__main__':
-    
-    llm_pipeline = None
-    terminators = None
-    model_type = "local"
+def main():
+    workspace = os.path.realpath(os.path.abspath(os.getcwd()))
+    set_workspace_root(workspace)
+
+    print("=" * 65)
+    print("                PULSE AI CLI ACTIVATED")
+    print(f"  Active Workspace: {workspace}")
+    print("  [Security] Workspace: FULL ACCESS | External Paths: PROTECTED")
+    print("=" * 65)
 
     try:
-        llm_pipeline, model_type = load_openai_model()
-    except Exception as gemini_e:
-        raise f"CRITICAL: Failed to load OpenAI API as well: {gemini_e}"
+        agent = Agent(name="Pulse", context_window=10)
+    except Exception as e:
+        raise RuntimeError(f"CRITICAL: Failed to initialize agent: {e}")
+
+    # Display restored context notification if existing session records were loaded
+    history_count = len(agent.memory.get_history(limit=0))
+    if history_count > 0:
+        print(f"[Memory] Restored previous session context ({history_count} messages loaded from {agent.memory.db_path}).")
 
     print("\nSelect Input Mode:")
     print("1. Voice Mode (Default)")
@@ -33,49 +51,69 @@ if __name__ == '__main__':
         print(f"Spoken responses: {'ENABLED' if enable_tts else 'DISABLED'}")
     else:
         set_tts_enabled(True)
-    
-    conversation_history = load_history()
+
+    last_sigint_time = 0.0
 
     while True:
-    
-        query = get_user_input(input_mode)
-        if (not query or query == "0") and input_mode == "text":
-            print("Exiting...")
-            break
+        try:
+            query = get_user_input(input_mode)
+            last_sigint_time = 0.0  # Reset double Ctrl+C timer when input is received
 
-        tool_check_history = [{"role": "system", "content": ROUTER_SYSTEM_PROMPT}, {"role": "user", "content": query}]       
-    
-        initial_response, _ = generate_response(
+            if not query:
+                continue
+
+            if query == "0" and input_mode == "text":
+                print("Exiting...")
+                break
+
+            # In-memory sliding context window provides multi-turn history without file I/O
+            conversation_context = agent.get_context()
+            tool_check_history = [
+                {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
+                *conversation_context,
+                {"role": "user", "content": query}
+            ]       
+        
+            initial_response, _ = generate_response(
                 query, 
                 tool_check_history, 
-                llm_pipeline, 
-                terminators, 
-                model_type=model_type, 
+                agent.client, 
+                model_type=agent.model_type, 
                 is_tool_check=True
             )
 
-    
-        tool_name, tool_result = tool_dispatcher(
+            tool_name, tool_result = tool_dispatcher(
                 initial_response, 
-                llm_pipeline, 
-                terminators, 
-                model_type=model_type
+                agent.client, 
+                model_type=agent.model_type
             )
 
-        if tool_name:
-            print(f"Executed tool: {tool_name}")
-            speak(f"Executed tool: {tool_name}")
-            print(f"Result: {tool_result}")
+            if tool_name:
+                print(f"Executed tool: {tool_name}")
+                speak(f"Executed tool: {tool_name}")
+                print(f"Result: {tool_result}")
 
-            time.sleep(1)
-                
-            conversation_history.append({"role": "user", "content": query})
-            conversation_history.append({"role": "assistant", "content": f"Executed tool: {tool_name}"})
-            save_history(conversation_history)
-            
-        else:
-            print(f"PulseAI ({model_type}): {initial_response}")
-            speak(initial_response)
-            conversation_history.append({"role": "user", "content": query})
-            conversation_history.append({"role": "assistant", "content": initial_response})
-            save_history(conversation_history)
+                time.sleep(1)
+                agent.remember("user", query)
+                agent.remember("assistant", f"Executed tool: {tool_name}")
+            else:
+                print(f"PulseAI ({agent.model_type}): {initial_response}")
+                speak(initial_response)
+                agent.remember("user", query)
+                agent.remember("assistant", initial_response)
+
+        except KeyboardInterrupt:
+            current_time = time.time()
+            if current_time - last_sigint_time <= 3.0:
+                print("\n\n[PulseAI] Second Ctrl+C confirmed. Saving session memory...")
+                count = agent.persist_session()
+                print(f"[PulseAI] Session safely saved ({count} messages persisted to {agent.memory.db_path}). Goodbye!\n")
+                break
+            else:
+                last_sigint_time = current_time
+                print("\n[PulseAI] Press Ctrl+C again within 3 seconds to save session and exit.")
+                continue
+
+
+if __name__ == '__main__':
+    main()

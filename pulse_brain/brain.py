@@ -56,7 +56,7 @@ def start_cli_agent_loop(task_description, query_func, model_type):
     commands_executed = []
     last_action_failed = False
 
-    for step in range(10):
+    for step in range(100):
         try:
             print(f"Thinking (Step {step+1})...")
             response_str = query_func(history)

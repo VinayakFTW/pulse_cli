@@ -17,7 +17,10 @@ STATIC_TEXT = SimpleNamespace(
     FAILED_AGENT_INIT="Failed to initialize agent",
 )
 
+RESULT = None
+
 def process_remote_request(data : RemoteRequest) -> str:
+    global RESULT
     if data.secret_key != os.environ.get("SECRET_KEY"):
         return HTTPException(status_code=401, detail=STATIC_TEXT.INVALID_SECRET_KEY)
     set_tts_enabled(False)
@@ -37,16 +40,15 @@ def process_remote_request(data : RemoteRequest) -> str:
     initial_response, _ = generate_response(
                                 data.query, 
                                 tool_check_history, 
-                                agent.client, 
-                                model_type=agent.model_type, 
+                                agent.client,
                                 is_tool_check=True)
     
     tool_name, tool_result = tool_dispatcher(
                                     initial_response, 
                                     agent.client, 
-                                    model_type=agent.model_type
                                 )
-    
+    RESULT = tool_result if tool_result else None
+
     if tool_name:
         time.sleep(1)
         agent.remember("user", data.query)
@@ -57,3 +59,11 @@ def process_remote_request(data : RemoteRequest) -> str:
         agent.remember("user", data.query)
         agent.remember("assistant", initial_response)
         return server_response(status_code=200, message=f"PulseAI ({agent.model_type}): {initial_response}")
+
+def get_result():
+    global RESULT
+    if RESULT is not None:
+        RESULT = dict(sorted(RESULT.items()))
+        return server_response(status_code=200, message="Result retrieved successfully", data={"result": RESULT})
+    else:
+        return server_response(status_code=404, message="No result available")

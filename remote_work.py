@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from pulse_tools.remote_request_processor import process_remote_request
+from pulse_tools.remote_request_processor import get_result
 
 app = FastAPI()
 
@@ -14,3 +15,4 @@ app.add_middleware(
 )
 
 app.add_api_route("/remote-request", process_remote_request, methods=["POST"])
+app.add_api_route("/get-result", get_result, methods=["GET"])

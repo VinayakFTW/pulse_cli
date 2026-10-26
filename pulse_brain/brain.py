@@ -42,10 +42,12 @@ def extract_json_decision(response_str):
     raise json.JSONDecodeError("Could not extract a valid JSON decision object", response_str, 0)
 
 
-def start_cli_agent_loop(task_description, query_func, model_type):
+def start_cli_agent_loop(task_description, query_func, remote=False):
     print(f"CLI Agent Activated. Task: {task_description}")
     speak(f"Starting CLI task: {task_description}")
-
+    remote_response_cache = None
+    if remote:
+        remote_response_cache = {}
     cli_prompt = get_cli_agent_prompt()
     history = [
         {"role": "system", "content": cli_prompt},
@@ -58,7 +60,6 @@ def start_cli_agent_loop(task_description, query_func, model_type):
 
     for step in range(100):
         try:
-            print(f"Thinking (Step {step+1})...")
             response_str = query_func(history)
             
             history.append({"role": "assistant", "content": response_str})
@@ -93,6 +94,8 @@ def start_cli_agent_loop(task_description, query_func, model_type):
 
                 print("CLI Task Complete.")
                 speak("CLI task complete.")
+                if remote:
+                    return remote_response_cache
                 return "CLI task finished."
 
             elif action == "write_file":
@@ -108,7 +111,8 @@ def start_cli_agent_loop(task_description, query_func, model_type):
                     last_action_failed = False
 
                 history.append({"role": "user", "content": f"Tool Output: {tool_output}"})
-
+                if remote:
+                    remote_response_cache[step] = {"action":f"write_file: {filepath}", "thought": thought, "tool_output": tool_output}
             elif action == "read_file":
                 filepath = args.get("filepath", "")
                 tool_output = read_file(filepath)
@@ -121,7 +125,8 @@ def start_cli_agent_loop(task_description, query_func, model_type):
                     last_action_failed = False
 
                 history.append({"role": "user", "content": f"Tool Output: {tool_output}"})
-
+                if remote:
+                    remote_response_cache[step] = {"action":f"read_file: {filepath}", "thought": thought, "tool_output": tool_output}
             elif action == "execute_shell_command":
                 command = args.get("command", "")
                 if command:
@@ -137,7 +142,8 @@ def start_cli_agent_loop(task_description, query_func, model_type):
                     last_action_failed = False
 
                 history.append({"role": "user", "content": f"Tool Output: {tool_output}"})
-
+                if remote:
+                    remote_response_cache[step] = {"action":f"execute_shell_command: {command}", "thought": thought, "tool_output": tool_output}
             else:
                 last_action_failed = True
                 unknown_msg = f"Error: Unknown tool '{action}'. Available tools: execute_shell_command, write_file, read_file, finish."
@@ -160,4 +166,7 @@ def start_cli_agent_loop(task_description, query_func, model_type):
             return f"Error: {e}"
 
     speak("Task step limit reached.")
+    if remote:
+        remote_response_cache["limit_reached"] = True
+        return remote_response_cache
     return "CLI task step limit reached."

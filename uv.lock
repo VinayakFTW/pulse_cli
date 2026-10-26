@@ -558,6 +558,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
+    { name = "fastapi" },
     { name = "faster-whisper" },
     { name = "langchain-core" },
     { name = "langgraph" },
@@ -572,6 +573,7 @@ dependencies = [
     { name = "speechrecognition" },
     { name = "torch" },
     { name = "torchvision" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -582,6 +584,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.15.0" },
+    { name = "fastapi", specifier = ">=0.141.1" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "langchain-core", specifier = ">=1.6.12" },
     { name = "langgraph", specifier = ">=1.2.16" },
@@ -596,6 +599,7 @@ requires-dist = [
     { name = "speechrecognition", specifier = ">=3.17.0" },
     { name = "torch", specifier = ">=2.7.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torchvision", specifier = ">=0.22.0", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "uvicorn", specifier = ">=0.52.4" },
 ]
 
 [package.metadata.requires-dev]

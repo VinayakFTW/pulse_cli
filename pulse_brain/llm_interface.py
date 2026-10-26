@@ -132,7 +132,7 @@ def tool_dispatcher(response, model_obj, model_type="openai"):
         
         query_func = lambda hist: query_llm(model_obj, hist, model_type)
         
-        result_message = start_cli_agent_loop(task_description, query_func, model_type)
+        result_message = start_cli_agent_loop(task_description, query_func)
         return tool_name, result_message
         
     print(f"Warning: Unhandled tool '{tool_name}'")

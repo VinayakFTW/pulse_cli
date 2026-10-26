@@ -112,7 +112,7 @@ When a CLI task is detected, Pulse executes a self-correcting agentic loop:
 - **Audio**: Microphone (for Voice Mode) and speakers/headphones (for Soprano TTS).
 
 ### Software Prerequisites
-- **Python**: 3.10, 3.11, 3.12, or 3.13.
+- **Python**: >=3.13.
 - **Docker & Docker Compose** (Recommended for FreeLLMAPI) OR **Node.js 20+**.
 - **Git** installed on your system path.
 

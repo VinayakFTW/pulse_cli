@@ -57,7 +57,7 @@ def main():
     while True:
         try:
             query = get_user_input(input_mode)
-            last_sigint_time = 0.0  # Reset double Ctrl+C timer when input is received
+            last_sigint_time = 0.0
 
             if not query:
                 continue
@@ -66,7 +66,6 @@ def main():
                 print("Exiting...")
                 break
 
-            # In-memory sliding context window provides multi-turn history without file I/O
             conversation_context = agent.get_context()
             tool_check_history = [
                 {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
@@ -105,13 +104,13 @@ def main():
         except KeyboardInterrupt:
             current_time = time.time()
             if current_time - last_sigint_time <= 3.0:
-                print("\n\n[PulseAI] Second Ctrl+C confirmed. Saving session memory...")
+                print("\n\n[System] Exiting and saving session memory...")
                 count = agent.persist_session()
-                print(f"[PulseAI] Session safely saved ({count} messages persisted to {agent.memory.db_path}). Goodbye!\n")
+                print(f"[System] Session safely saved ({count} messages persisted to {agent.memory.db_path}). Goodbye!\n")
                 break
             else:
                 last_sigint_time = current_time
-                print("\n[PulseAI] Press Ctrl+C again within 3 seconds to save session and exit.")
+                print("\n[System] Press Ctrl+C again to save session and exit.")
                 continue
 
 

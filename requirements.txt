@@ -1,9 +1,0 @@
-sounddevice
-pyaudio
-dotenv
-requests
-numpy
-SpeechRecognition
-openai
-soprano-tts
-# torch torchvision --index-url https://download.pytorch.org/whl/cu130

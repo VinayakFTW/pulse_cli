@@ -5,7 +5,7 @@ from typing import Tuple
 
 
 class PermissionManager:
-    """Manages workspace boundary enforcement and Human-in-the-Loop (HITL) access control."""
+    """Manages workspace boundary enforcement and access control."""
 
     def __init__(self, workspace_root: str | None = None, settings_filename: str = "pulse_settings.json"):
         self.workspace_root = os.path.realpath(os.path.abspath(workspace_root or os.getcwd()))
@@ -15,7 +15,7 @@ class PermissionManager:
     def _load_settings(self, filename: str) -> dict:
         """Loads settings from active workspace or user home directory ~/.pulse/."""
         candidates = [
-            os.path.join(self.workspace_root, filename),
+            os.path.join(self.workspace_root,".pulse", filename),
             os.path.expanduser(f"~/.pulse/{filename}")
         ]
         for path in candidates:
@@ -54,14 +54,13 @@ class PermissionManager:
             target_path = os.path.join(self.workspace_root, target_path)
         resolved = os.path.realpath(os.path.abspath(target_path))
 
-        # 1. Within active workspace: Full access granted
         if self.is_within_workspace(resolved):
             return True, "within_workspace"
 
         perms = self.settings.get("permissions", {})
+        auto_approve = perms.get("auto_approve_external", False) or perms.get("auto_approv_external", False)
 
-        # 2. Settings policy overrides
-        if not perms.get("require_hitl_for_external_access", True) or perms.get("auto_approve_external", False):
+        if not perms.get("require_hitl_for_external_access", True) or auto_approve:
             return True, "settings_override"
 
         if not is_write and perms.get("allow_external_reads", False):
@@ -70,7 +69,6 @@ class PermissionManager:
         if is_write and perms.get("allow_external_writes", False):
             return True, "settings_write_allowed"
 
-        # 3. Pre-configured allowed directories
         for allowed in perms.get("allowed_directories", []):
             try:
                 res_allowed = os.path.realpath(os.path.abspath(allowed))
@@ -79,7 +77,6 @@ class PermissionManager:
             except (ValueError, Exception):
                 pass
 
-        # 4. Session-approved directories
         for approved in self.session_approved_dirs:
             try:
                 if os.path.commonpath([resolved, approved]) == approved:
@@ -87,7 +84,6 @@ class PermissionManager:
             except (ValueError, Exception):
                 pass
 
-        # 5. Human-in-the-Loop (HITL) prompt
         action_name = "WRITE" if is_write else "READ"
         print("\n" + "=" * 70)
         print(f"[SECURITY ALERT: External Directory Access Requested]")
@@ -123,10 +119,12 @@ class PermissionManager:
         Inspects shell command for external path references or directory traversals.
         Returns (is_allowed, reason_or_error_message).
         """
-        if not self.settings.get("permissions", {}).get("require_hitl_for_external_access", True):
+        perms = self.settings.get("permissions", {})
+        auto_approve = perms.get("auto_approve_external", False)
+
+        if not perms.get("require_hitl_for_external_access", True) or auto_approve:
             return True, "settings_override"
 
-        # Check for directory traversal (..) or drive letters (C:\, D:\, etc.)
         has_traversal = ".." in command
         abs_path_match = re.search(r"[A-Za-z]:[\\/][^ \t\n\r\"']+", command)
 
@@ -135,6 +133,22 @@ class PermissionManager:
                 path_ref = abs_path_match.group(0)
                 if self.is_within_workspace(path_ref):
                     return True, "within_workspace"
+
+                resolved_path = os.path.realpath(os.path.abspath(path_ref))
+                for allowed in perms.get("allowed_directories", []):
+                    try:
+                        res_allowed = os.path.realpath(os.path.abspath(allowed))
+                        if os.path.commonpath([resolved_path, res_allowed]) == res_allowed:
+                            return True, "allowed_directory"
+                    except (ValueError, Exception):
+                        pass
+
+                for approved in self.session_approved_dirs:
+                    try:
+                        if os.path.commonpath([resolved_path, approved]) == approved:
+                            return True, "session_approved"
+                    except (ValueError, Exception):
+                        pass
 
             print("\n" + "=" * 70)
             print(f"[SECURITY ALERT: External Shell Command Execution Requested]")

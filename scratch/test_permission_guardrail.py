@@ -103,6 +103,66 @@ def test_permission_guardrail_suite():
         assert reason == "settings_override"
         print("    PASSED: require_hitl_for_external_access=false bypasses HITL.")
 
+        # 6b. Testing auto_approve_external = true
+        print("[6b] Testing auto_approve_external = true...")
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "permissions": {
+                    "allowed_directories": [],
+                    "require_hitl_for_external_access": True,
+                    "auto_approve_external": True
+                }
+            }, f)
+
+        pm_auto = PermissionManager(workspace_root=temp_workspace)
+        allowed_path, reason_path = pm_auto.check_path_access(os.path.join(temp_external, "auto.txt"), is_write=True)
+        assert allowed_path is True and reason_path == "settings_override", f"Path access failed: {allowed_path}, {reason_path}"
+        
+        external_cmd = f'python "{os.path.join(temp_external, "test.py")}"'
+        allowed_cmd, reason_cmd = pm_auto.check_command_access(external_cmd)
+        assert allowed_cmd is True and reason_cmd == "settings_override", f"Command access failed: {allowed_cmd}, {reason_cmd}"
+        print("    PASSED: auto_approve_external=true overrides both path and command HITL prompts.")
+
+        # 6c. Testing auto_approv_external = true (spelling typo tolerance)
+        print("[6c] Testing auto_approv_external = true (typo tolerance)...")
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "permissions": {
+                    "allowed_directories": [],
+                    "require_hitl_for_external_access": True,
+                    "auto_approv_external": True
+                }
+            }, f)
+
+        pm_typo = PermissionManager(workspace_root=temp_workspace)
+        allowed_typo_path, _ = pm_typo.check_path_access(os.path.join(temp_external, "typo.txt"), is_write=True)
+        allowed_typo_cmd, _ = pm_typo.check_command_access(external_cmd)
+        assert allowed_typo_path is True and allowed_typo_cmd is True
+        print("    PASSED: auto_approv_external typo tolerance works for path and command.")
+
+        # 6d. Testing check_command_access with allowed_directories and HITL
+        print("[6d] Testing check_command_access with allowed_directories and HITL prompts...")
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "permissions": {
+                    "allowed_directories": [temp_external],
+                    "require_hitl_for_external_access": True,
+                    "auto_approve_external": False
+                }
+            }, f)
+
+        pm_cmd_allow = PermissionManager(workspace_root=temp_workspace)
+        allowed_cmd2, reason_cmd2 = pm_cmd_allow.check_command_access(external_cmd)
+        assert allowed_cmd2 is True and reason_cmd2 == "allowed_directory", f"Expected allowed_directory, got: {reason_cmd2}"
+
+        # External command not in allowed_directories with user denial
+        ext_other = "C:\\Windows\\System32\\cmd.exe"
+        allowed_deny, _ = pm_cmd_allow.check_command_access(ext_other, prompt_callback=lambda c, a: "n")
+        assert allowed_deny is False
+        allowed_yes, reason_yes = pm_cmd_allow.check_command_access(ext_other, prompt_callback=lambda c, a: "y")
+        assert allowed_yes is True and reason_yes == "user_approved_command"
+        print("    PASSED: check_command_access correctly enforces allowed_directories and user prompt choices.")
+
         # 7. Testing general_tools integration
         print("[7] Testing write_file and read_file tools with PermissionManager...")
         # Reset settings file to require HITL

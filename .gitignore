@@ -5,4 +5,4 @@ check.py
 __pycache__
 graphify-out/
 .pulse/
-*.db
+*.db

@@ -116,7 +116,7 @@ def parse_tool_call(response):
         print(f"Error parsing tool command: {e}. Full response: {response}")
         return None, None
 
-def tool_dispatcher(response, model_obj, model_type="openai"):
+def tool_dispatcher(response, model_obj, model_type="openai",remote = False):
     """
     Parses the LLM's tool command and calls the appropriate function.
     Returns (tool_name, tool_result). If response is chat, returns (None, None).
@@ -132,7 +132,7 @@ def tool_dispatcher(response, model_obj, model_type="openai"):
         
         query_func = lambda hist: query_llm(model_obj, hist, model_type)
         
-        result_message = start_cli_agent_loop(task_description, query_func)
+        result_message = start_cli_agent_loop(task_description, query_func, remote=remote)
         return tool_name, result_message
         
     print(f"Warning: Unhandled tool '{tool_name}'")

@@ -45,7 +45,8 @@ def process_remote_request(data : RemoteRequest) -> str:
     
     tool_name, tool_result = tool_dispatcher(
                                     initial_response, 
-                                    agent.client, 
+                                    agent.client,
+                                    remote=True 
                                 )
     RESULT = tool_result if tool_result else None
 

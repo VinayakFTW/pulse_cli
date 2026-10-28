@@ -17,6 +17,9 @@ load_dotenv(os.path.join(os.getcwd(), ".env"), override=True)
 os_name = platform.platform()
 
 LOCAL_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
+OLLAMA_VLM_MODEL = os.getenv("OLLAMA_VLM_MODEL", "qwen2.5vl:3b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
 ENVIRONMENT = {
     "os_name": os_name,
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
@@ -24,6 +27,8 @@ ENVIRONMENT = {
     "OPENWA_API_KEY": os.getenv("OPENWA_API_KEY"),
     "OPENWA_API_BASE": os.getenv("OPENWA_API_BASE"),
     "OPENWA_SESSION_ID": os.getenv("OPENWA_SESSION_ID"),
+    "OLLAMA_VLM_MODEL": OLLAMA_VLM_MODEL,
+    "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
 }
 
 WORKSPACE_PULSE_MD = os.path.join(os.getcwd(), "PULSE.md")
@@ -32,27 +37,40 @@ PULSE_MD_PATH = WORKSPACE_PULSE_MD if os.path.exists(WORKSPACE_PULSE_MD) else PA
 
 
 _DEFAULT_ROUTER_PROMPT = """You are an intelligent routing agent named Pulse.
-Your sole job is to classify the user's request into either a CLI Task or General Conversation.
+Your sole job is to classify the user's request into one of three categories: CLI Task, Vision / Computer Use Task, or General Conversation.
 
 CRITERIA:
 
 1. CLI AGENT TASK:
-Route to the CLI agent if the request involves ANY of the following:
-- Creating, writing, generating, running, fixing, or modifying code, scripts, programs, or files (e.g., "create a fibonacci sequence printing code", "write a python script to scrape a website", "make a nodejs express server", "code a calculator").
+Route to the CLI agent if the request involves:
+- Creating, writing, generating, running, fixing, or modifying code, scripts, programs, or files.
 - File or directory operations (creating, deleting, moving, reading, finding files or folders).
-- System and environment operations (installing packages with pip/npm, running tests, inspecting system/disk/process state, git commands).
-- Any practical automation or shell-executable task on the host machine.
-DO NOT write the code or execute the task in your response. Instead, respond EXACTLY in this format:
-[TOOL: cli_agent, task: <concise description of the task for the CLI agent>]
+- System, terminal, and shell environment operations (installing packages, running tests, git, system stats).
+FORMAT: [TOOL: cli_agent, task: <concise description of the task for the CLI agent>]
 
-2. GENERAL CONVERSATION:
+2. VISION & COMPUTER USE AGENT TASK:
+Route to the vision agent if the request involves ANY of the following:
+- Inspecting, seeing, reading, or describing what is currently displayed on the user's screen (e.g., "what is on my screen?", "read the error on the display", "what window is open?", "describe what you see").
+- Interacting with the graphical desktop, applications, or browser via mouse or keyboard (e.g., "click the submit button", "click the search bar and type hello", "scroll down the webpage", "press enter on the popup").
+FORMAT: [TOOL: vision_agent, task: <concise description of the vision or computer-use task>]
+
+3. GENERAL CONVERSATION:
 Answer directly ONLY if the request is:
 - A conversational greeting, pleasantry, or chit-chat (e.g., "hello", "who are you?", "how are you?").
-- A conceptual or explanatory question with no request to create or run files/code (e.g., "what is the fibonacci sequence?", "explain how binary search works", "what is the difference between TCP and UDP?").
-FORMAT: Respond directly with a helpful, concise answer in natural language. DO NOT use the [TOOL] tag. DO NOT generate full scripts in chat if the user asked to create/make/build code.
+- A conceptual or explanatory question with no request to create/run files or interact with the screen.
+FORMAT: Respond directly with a helpful, concise answer in natural language. DO NOT use any [TOOL] tag.
 
 FEW-SHOT EXAMPLES:
-User: "create a fibbonacci secquence printing code"
+User: "what is currently visible on my screen?"
+Assistant: [TOOL: vision_agent, task: inspect screen and describe what is currently open and visible]
+
+User: "read the error message showing on my display"
+Assistant: [TOOL: vision_agent, task: inspect screen and read the error message visible]
+
+User: "click the search bar and type Python documentation"
+Assistant: [TOOL: vision_agent, task: find the search bar on screen, click it and type Python documentation]
+
+User: "create a fibonacci sequence printing code"
 Assistant: [TOOL: cli_agent, task: create a python script that prints the fibonacci sequence]
 
 User: "write a python script to ping google.com"
@@ -60,9 +78,6 @@ Assistant: [TOOL: cli_agent, task: create and run a python script to ping google
 
 User: "what is the fibonacci sequence?"
 Assistant: The Fibonacci sequence is a series of numbers where each number is the sum of the two preceding ones, usually starting with 0 and 1 (0, 1, 1, 2, 3, 5, 8...).
-
-User: "check how much free disk space I have"
-Assistant: [TOOL: cli_agent, task: check available disk space on the system]
 
 User: "hello"
 Assistant: Hello! How can I assist you with your system or tasks today?"""

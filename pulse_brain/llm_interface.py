@@ -4,6 +4,7 @@ import re
 from pulse_brain.brain import start_cli_agent_loop
 from pulse_config.config import ENVIRONMENT
 from pulse_brain.memory_base.memory import Memory
+from pulse_eye.vision_agent import run_vision_agent
 
 def load_openai_model(api_key=ENVIRONMENT["OPENAI_API_KEY"], base_url=ENVIRONMENT["OPENAI_API_BASE"]):
     """Configures and returns the OpenAI client."""
@@ -105,7 +106,7 @@ def parse_tool_call(response):
         params_str = match.group(2).strip()
         params = {}
     
-        if tool_name in ["cli_agent"]:
+        if tool_name in ["cli_agent", "vision_agent"]:
             if ':' in params_str:
                 key, value = params_str.split(':', 1)
                 params[key.strip()] = value.strip()
@@ -133,6 +134,14 @@ def tool_dispatcher(response, model_obj, model_type="openai",remote = False):
         query_func = lambda hist: query_llm(model_obj, hist, model_type)
         
         result_message = start_cli_agent_loop(task_description, query_func, remote=remote)
+        return tool_name, result_message
+
+    elif tool_name == "vision_agent":
+        task_description = params.get('task')
+        if not task_description:
+            task_description = "Inspect the screen and report observations"
+        
+        result_message = run_vision_agent(task_description)
         return tool_name, result_message
         
     print(f"Warning: Unhandled tool '{tool_name}'")

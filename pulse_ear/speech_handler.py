@@ -127,13 +127,13 @@ def get_stt_model():
             print("Whisper loaded on CPU.")
     return _stt_model
 
-def record_microphone( max_duration=60, silence_duration=1.0, threshold=0.02, min_duration=0.5, ):
+def record_microphone( max_duration=60, silence_duration=3.0, threshold=0.02):
     """
     Records audio from the microphone until silence is detected or max_duration is reached.
     Returns a NumPy array of the recorded audio.
     """
     print("Listening...")
-    block_duration = 0.1 # 100 ms
+    block_duration = 0.1 #100ms
     block_size = int(SAMPLE_RATE * block_duration)
     audio_chunks = []
     silence_time = 0.0 

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pulse Voice</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app-container" class="drag-region">
+        <button id="close-btn" class="no-drag" title="Close window">&times;</button>
+        <canvas id="orb-canvas"></canvas>
+
+        <div id="controls-container" class="controls-container controls-idle no-drag">
+            <button id="pause-btn" class="pause-pill" title="Toggle Voice Pause (Spacebar)">
+                <span id="pause-icon" class="pause-icon">&#9646;&#9646;</span>
+                <span id="pause-label" class="pause-label">PAUSE</span>
+            </button>
+        </div>
+    </div>
+
+    <script src="/static/orb.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

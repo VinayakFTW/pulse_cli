@@ -56,14 +56,27 @@ from faster_whisper import WhisperModel
 _tts_model = None
 _tts_enabled = True
 _stt_model = None
+_amplitude_callback = None
+_user_amplitude_callback = None
 
 SAMPLE_RATE = 16000
+
+def set_amplitude_callback(callback):
+    """Sets the callback function invoked with float amplitude [0.0, 1.0] during agent speech."""
+    global _amplitude_callback
+    _amplitude_callback = callback
+    return _amplitude_callback
+
+def set_user_amplitude_callback(callback):
+    """Sets the callback function invoked with float amplitude [0.0, 1.0] during user mic recording."""
+    global _user_amplitude_callback
+    _user_amplitude_callback = callback
+    return _user_amplitude_callback
 
 def set_tts_enabled(enabled: bool):
     """Controls whether speak() synthesizes and plays audio."""
     global _tts_enabled
     _tts_enabled = bool(enabled)
-
     return _tts_enabled
 
 def get_tts_model():
@@ -78,6 +91,44 @@ def get_tts_model():
             decoder_batch_size=2
         )
     return _tts_model
+
+def play_stream_monitored(stream, sample_rate=32000):
+    """
+    Plays streamed audio chunks via sounddevice while broadcasting real-time RMS amplitude.
+    """
+    import torch
+    with sd.OutputStream(
+        samplerate=sample_rate,
+        channels=1,
+        dtype='float32',
+        blocksize=0
+    ) as out_stream:
+        for chunk in stream:
+            if isinstance(chunk, torch.Tensor):
+                chunk = chunk.detach().cpu()
+
+            if chunk.dim() == 1:
+                chunk = chunk.unsqueeze(1)
+            elif chunk.dim() == 2 and chunk.shape[0] == 1:
+                chunk = chunk.transpose(0, 1)
+
+            chunk_np = chunk.numpy()
+            if _amplitude_callback:
+                try:
+                    rms = float(np.sqrt(np.mean(chunk_np ** 2)))
+                    # Normalize speech amplitude dynamically with comfortable scaling
+                    normalized_amp = min(1.0, rms * 4.5)
+                    _amplitude_callback(normalized_amp)
+                except Exception:
+                    pass
+
+            out_stream.write(chunk_np)
+
+    if _amplitude_callback:
+        try:
+            _amplitude_callback(0.0)
+        except Exception:
+            pass
 
 def speak(_audio=None, voice_change=False):
     """
@@ -94,9 +145,14 @@ def speak(_audio=None, voice_change=False):
     try:
         model = get_tts_model()
         stream = model.infer_stream(text, chunk_size=1)
-        play_stream(stream)
+        play_stream_monitored(stream)
     except Exception as e:
         print(f"Audio playback error: {e}")
+        if _amplitude_callback:
+            try:
+                _amplitude_callback(0.0)
+            except Exception:
+                pass
 
     return text
 
@@ -131,6 +187,7 @@ def record_microphone( max_duration=60, silence_duration=3.0, threshold=0.02):
     """
     Records audio from the microphone until silence is detected or max_duration is reached.
     Returns a NumPy array of the recorded audio.
+    Halts recording when voice mode is paused.
     """
     print("Listening...")
     block_duration = 0.1 #100ms
@@ -141,10 +198,30 @@ def record_microphone( max_duration=60, silence_duration=3.0, threshold=0.02):
     start_time = time.time()
     with sd.InputStream( samplerate=SAMPLE_RATE, channels=1, dtype="float32", blocksize=block_size, ) as stream:
         while True:
+            # Check pause state from voice server
+            try:
+                from pulse_ui.voice_server import is_voice_paused
+                if is_voice_paused():
+                    audio_chunks.clear()
+                    speech_started = False
+                    silence_time = 0.0
+                    start_time = time.time()
+                    time.sleep(0.1)
+                    continue
+            except ImportError:
+                pass
+
             audio, _ = stream.read(block_size)
             audio = audio[:, 0].copy()
-            rms = np.sqrt(np.mean(audio ** 2))
+            rms = float(np.sqrt(np.mean(audio ** 2)))
             audio_chunks.append(audio)
+
+            if _user_amplitude_callback:
+                try:
+                    _user_amplitude_callback(min(1.0, rms * 5.0))
+                except Exception:
+                    pass
+
             if rms > threshold: 
                 speech_started = True
                 silence_time = 0.0
@@ -154,6 +231,13 @@ def record_microphone( max_duration=60, silence_duration=3.0, threshold=0.02):
                 break
             if time.time() - start_time >= max_duration:
                 break
+
+    if _user_amplitude_callback:
+        try:
+            _user_amplitude_callback(0.0)
+        except Exception:
+            pass
+
     audio = np.concatenate(audio_chunks)
     trim_samples = int(silence_time * SAMPLE_RATE)
     if trim_samples > 0 and trim_samples < len(audio):
